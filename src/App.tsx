@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
+import HomePage from "./pages/HomePage";
 import LibraryPage from "./pages/LibraryPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import AddTranscriptPage from "./pages/AddTranscriptPage";
@@ -44,7 +45,8 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/library" replace />} />
+      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/home" element={<HomePage onLogout={signOut} />} />
       <Route path="/library" element={<LibraryPage onLogout={signOut} />} />
       <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
       <Route path="/video/:id/add-transcript" element={<AddTranscriptPage onLogout={signOut} />} />
