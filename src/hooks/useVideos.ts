@@ -785,6 +785,10 @@ export function useAddTranscriptToVideo() {
       transcript_text?: string;
       screenshot_base64_list?: string[];
     }) => {
+      console.log('[useAddTranscriptToVideo] Starting mutation for video:', videoId);
+      console.log('[useAddTranscriptToVideo] Has transcript_text:', !!transcript_text);
+      console.log('[useAddTranscriptToVideo] Screenshots count:', screenshot_base64_list?.length || 0);
+      
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
         {
@@ -803,20 +807,26 @@ export function useAddTranscriptToVideo() {
 
       if (!response.ok) {
         const error = await response.json();
+        console.error('[useAddTranscriptToVideo] Error response:', error);
         throw new Error(error.error || 'Failed to add transcript');
       }
 
-      return response.json();
+      const result = await response.json();
+      console.log('[useAddTranscriptToVideo] Success response:', result);
+      return result;
     },
     onSuccess: (_, variables) => {
+      console.log('[useAddTranscriptToVideo] Invalidating queries for video:', variables.videoId);
       queryClient.invalidateQueries({ queryKey: ['videos'] });
       queryClient.invalidateQueries({ queryKey: ['video', variables.videoId] });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', variables.videoId] });
       toast({
         title: 'Transcript added!',
         description: 'Your video is now ready.',
       });
     },
     onError: (error: Error) => {
+      console.error('[useAddTranscriptToVideo] Mutation error:', error);
       toast({
         title: 'Error',
         description: error.message,
