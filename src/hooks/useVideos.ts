@@ -25,6 +25,8 @@ export interface Video {
   error_message: string | null;
   failed_step: string | null;
   captions_missing: boolean;
+  ai_suggestions_generated: boolean;
+  ai_suggestions_generated_at: string | null;
   created_at: string;
   updated_at: string;
 }

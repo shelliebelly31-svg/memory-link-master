@@ -21,6 +21,7 @@ export type Database = {
           id: string
           selected_text: string
           start_seconds: number
+          text_hash: string | null
           type: Database["public"]["Enums"]["highlight_type"]
           user_id: string
           video_id: string
@@ -31,6 +32,7 @@ export type Database = {
           id?: string
           selected_text: string
           start_seconds: number
+          text_hash?: string | null
           type: Database["public"]["Enums"]["highlight_type"]
           user_id: string
           video_id: string
@@ -41,6 +43,7 @@ export type Database = {
           id?: string
           selected_text?: string
           start_seconds?: number
+          text_hash?: string | null
           type?: Database["public"]["Enums"]["highlight_type"]
           user_id?: string
           video_id?: string
@@ -305,6 +308,8 @@ export type Database = {
       }
       videos: {
         Row: {
+          ai_suggestions_generated: boolean
+          ai_suggestions_generated_at: string | null
           captions_missing: boolean
           created_at: string
           duration_seconds: number | null
@@ -321,6 +326,8 @@ export type Database = {
           youtube_url: string
         }
         Insert: {
+          ai_suggestions_generated?: boolean
+          ai_suggestions_generated_at?: string | null
           captions_missing?: boolean
           created_at?: string
           duration_seconds?: number | null
@@ -337,6 +344,8 @@ export type Database = {
           youtube_url: string
         }
         Update: {
+          ai_suggestions_generated?: boolean
+          ai_suggestions_generated_at?: string | null
           captions_missing?: boolean
           created_at?: string
           duration_seconds?: number | null
