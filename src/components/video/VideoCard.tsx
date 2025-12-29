@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Clock, CheckCircle, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
-import { Video, VideoStatus, useRetryVideo } from '@/hooks/useVideos';
+import { Play, Clock, CheckCircle, Loader2, AlertCircle, RotateCcw, AlertTriangle, FileText } from 'lucide-react';
+import { Video, VideoStatus, useRetryVideo, useAddTranscriptToVideo } from '@/hooks/useVideos';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,6 +11,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { AddTranscriptDialog } from './AddTranscriptDialog';
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '0:00';
@@ -28,11 +29,13 @@ interface VideoCardProps {
 function StatusBadge({ 
   status, 
   errorMessage, 
-  onErrorClick 
+  onErrorClick,
+  onNeedsAttentionClick,
 }: { 
   status: VideoStatus; 
   errorMessage: string | null;
   onErrorClick?: () => void;
+  onNeedsAttentionClick?: () => void;
 }) {
   switch (status) {
     case 'ready':
@@ -56,6 +59,20 @@ function StatusBadge({
           Queued
         </Badge>
       );
+    case 'needs_attention':
+      return (
+        <Badge 
+          className="bg-yellow-500/20 text-yellow-600 dark:text-yellow-400 border-yellow-500/30 cursor-pointer hover:bg-yellow-500/30 transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onNeedsAttentionClick?.();
+          }}
+        >
+          <AlertTriangle className="h-3 w-3 mr-1" />
+          Needs attention
+        </Badge>
+      );
     case 'failed':
       return (
         <Badge 
@@ -75,10 +92,13 @@ function StatusBadge({
 
 export function VideoCard({ video }: VideoCardProps) {
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const retryMutation = useRetryVideo();
+  const addTranscriptMutation = useAddTranscriptToVideo();
   
   const isClickable = video.status === 'ready';
   const isFailed = video.status === 'failed';
+  const needsAttention = video.status === 'needs_attention';
 
   const handleRetry = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -87,6 +107,16 @@ export function VideoCard({ video }: VideoCardProps) {
     retryMutation.mutate({ 
       videoId: video.id, 
       fromStep: video.failed_step || undefined 
+    });
+  };
+
+  const handleAddTranscript = async (data: {
+    transcript_text?: string;
+    screenshot_base64_list?: string[];
+  }) => {
+    await addTranscriptMutation.mutateAsync({
+      videoId: video.id,
+      ...data,
     });
   };
 
@@ -115,6 +145,22 @@ export function VideoCard({ video }: VideoCardProps) {
             </div>
           </div>
         )}
+        {needsAttention && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/40">
+            <Button
+              size="sm"
+              className="gap-2"
+              onClick={(e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                setTranscriptDialogOpen(true);
+              }}
+            >
+              <FileText className="h-4 w-4" />
+              Add Transcript
+            </Button>
+          </div>
+        )}
       </div>
       <div className="p-4 space-y-3">
         <h3 className="font-semibold text-card-foreground line-clamp-2 leading-snug">
@@ -125,6 +171,7 @@ export function VideoCard({ video }: VideoCardProps) {
             status={video.status} 
             errorMessage={video.error_message}
             onErrorClick={() => setErrorDialogOpen(true)}
+            onNeedsAttentionClick={() => setTranscriptDialogOpen(true)}
           />
           <span className="text-xs text-muted-foreground">
             {new Date(video.created_at).toLocaleDateString()}
@@ -141,9 +188,10 @@ export function VideoCard({ video }: VideoCardProps) {
           {content}
         </Link>
       ) : (
-        <div className={isFailed ? '' : 'opacity-75'}>{content}</div>
+        <div className={isFailed || needsAttention ? '' : 'opacity-75'}>{content}</div>
       )}
 
+      {/* Error Dialog */}
       <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
@@ -185,6 +233,14 @@ export function VideoCard({ video }: VideoCardProps) {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Add Transcript Dialog */}
+      <AddTranscriptDialog
+        open={transcriptDialogOpen}
+        onOpenChange={setTranscriptDialogOpen}
+        onSubmit={handleAddTranscript}
+        videoTitle={video.title}
+      />
     </>
   );
 }

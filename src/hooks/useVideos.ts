@@ -3,7 +3,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from '@/hooks/use-toast';
 
-export type VideoStatus = 'queued' | 'transcribing' | 'ready' | 'failed';
+export type VideoStatus = 'queued' | 'transcribing' | 'ready' | 'failed' | 'needs_attention';
 
 export interface Video {
   id: string;

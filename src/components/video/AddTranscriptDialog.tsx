@@ -1,7 +1,6 @@
 import { useState, useRef } from 'react';
-import { Plus, Link as LinkIcon, X, Loader2, FileText, Image, Upload } from 'lucide-react';
+import { FileText, Image, Upload, X, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import {
@@ -9,23 +8,27 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
+  DialogDescription,
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
 
-interface AddVideoDialogProps {
-  onAddVideo: (data: {
-    youtube_url?: string;
+interface AddTranscriptDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onSubmit: (data: {
     transcript_text?: string;
     screenshot_base64_list?: string[];
   }) => Promise<void>;
-  triggerButton?: React.ReactNode;
+  videoTitle?: string;
 }
 
-export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState('');
+export function AddTranscriptDialog({ 
+  open, 
+  onOpenChange, 
+  onSubmit,
+  videoTitle 
+}: AddTranscriptDialogProps) {
   const [transcriptText, setTranscriptText] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [screenshotPreviews, setScreenshotPreviews] = useState<string[]>([]);
@@ -62,7 +65,6 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
   };
 
   const resetForm = () => {
-    setUrl('');
     setTranscriptText('');
     setScreenshots([]);
     setScreenshotPreviews([]);
@@ -74,50 +76,34 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    const hasUrl = url.trim();
     const hasText = transcriptText.trim();
     const hasScreenshots = screenshots.length > 0;
 
-    // Validation: at least one source required
-    if (!hasUrl && !hasText && !hasScreenshots) {
+    if (!hasText && !hasScreenshots) {
       toast({
         title: 'Input required',
-        description: 'Please provide a video link, paste transcript text, or upload screenshots',
+        description: 'Please paste transcript text or upload screenshots',
         variant: 'destructive',
       });
       return;
     }
 
-    // URL validation if provided
-    if (hasUrl) {
-      const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
-      if (!youtubeRegex.test(url)) {
-        toast({
-          title: 'Invalid URL',
-          description: 'Please enter a valid YouTube URL',
-          variant: 'destructive',
-        });
-        return;
-      }
-    }
-
     setIsLoading(true);
     try {
-      await onAddVideo({
-        youtube_url: hasUrl ? url : undefined,
+      await onSubmit({
         transcript_text: hasText ? transcriptText : undefined,
         screenshot_base64_list: hasScreenshots ? screenshots : undefined,
       });
       toast({
-        title: 'Video added!',
-        description: 'Your video is being processed. This may take a few minutes.',
+        title: 'Transcript added!',
+        description: 'Processing your transcript now.',
       });
       resetForm();
-      setOpen(false);
+      onOpenChange(false);
     } catch (error) {
       toast({
         title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to add video. Please try again.',
+        description: error instanceof Error ? error.message : 'Failed to add transcript.',
         variant: 'destructive',
       });
     } finally {
@@ -127,57 +113,24 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
 
   return (
     <Dialog open={open} onOpenChange={(newOpen) => {
-      setOpen(newOpen);
+      onOpenChange(newOpen);
       if (!newOpen) resetForm();
     }}>
-      <DialogTrigger asChild>
-        {triggerButton || (
-          <Button variant="glow" size="lg" className="gap-2">
-            <Plus className="h-5 w-5" />
-            Add Video
-          </Button>
-        )}
-      </DialogTrigger>
       <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="text-xl">Add Video</DialogTitle>
+          <DialogTitle className="text-xl">Add Transcript</DialogTitle>
+          {videoTitle && (
+            <DialogDescription className="line-clamp-1">
+              For: {videoTitle}
+            </DialogDescription>
+          )}
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-5 mt-4">
-          {/* Video Link */}
-          <div className="space-y-2">
-            <Label htmlFor="url" className="flex items-center gap-2">
-              <LinkIcon className="h-4 w-4 text-muted-foreground" />
-              Video Link
-              <span className="text-xs text-muted-foreground">(optional)</span>
-            </Label>
-            <div className="relative">
-              <Input
-                id="url"
-                placeholder="https://youtube.com/watch?v=..."
-                value={url}
-                onChange={(e) => setUrl(e.target.value)}
-                disabled={isLoading}
-              />
-              {url && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon-sm"
-                  className="absolute right-2 top-1/2 -translate-y-1/2"
-                  onClick={() => setUrl('')}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </div>
-          </div>
-
           {/* Transcript Text */}
           <div className="space-y-2">
             <Label htmlFor="transcript" className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
               Paste Transcript
-              <span className="text-xs text-muted-foreground">(optional)</span>
             </Label>
             <Textarea
               id="transcript"
@@ -185,8 +138,14 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               value={transcriptText}
               onChange={(e) => setTranscriptText(e.target.value)}
               disabled={isLoading}
-              className="min-h-[120px] resize-none"
+              className="min-h-[150px] resize-none"
             />
+          </div>
+
+          <div className="flex items-center gap-3">
+            <div className="flex-1 border-t border-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="flex-1 border-t border-border" />
           </div>
 
           {/* Screenshot Upload */}
@@ -194,7 +153,6 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
             <Label className="flex items-center gap-2">
               <Image className="h-4 w-4 text-muted-foreground" />
               Upload Screenshots
-              <span className="text-xs text-muted-foreground">(optional)</span>
             </Label>
             <div
               className={cn(
@@ -206,10 +164,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
             >
               <Upload className="h-8 w-8 mx-auto text-muted-foreground mb-2" />
               <p className="text-sm text-muted-foreground">
-                Click to upload or drag and drop
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                PNG, JPG up to 10 files
+                Click to upload transcript screenshots
               </p>
             </div>
             <input
@@ -222,7 +177,6 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               disabled={isLoading}
             />
             
-            {/* Screenshot previews */}
             {screenshotPreviews.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {screenshotPreviews.map((preview, index) => (
@@ -250,12 +204,6 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
             )}
           </div>
 
-          {/* Helper text */}
-          <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            💡 Provide at least one: a YouTube link, pasted transcript text, or screenshots. 
-            If the video has no captions, you'll be prompted to add the transcript manually.
-          </p>
-
           <div className="flex gap-3 pt-2">
             <Button
               type="button"
@@ -263,7 +211,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               className="flex-1"
               onClick={() => {
                 resetForm();
-                setOpen(false);
+                onOpenChange(false);
               }}
               disabled={isLoading}
             >
@@ -273,10 +221,10 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Adding...
+                  Processing...
                 </>
               ) : (
-                'Add Video'
+                'Add Transcript'
               )}
             </Button>
           </div>
