@@ -71,6 +71,11 @@ export default {
           foreground: "hsl(var(--ai-suggested-foreground))",
           muted: "hsl(var(--ai-suggested-muted))",
         },
+        highlight: {
+          remember: "hsl(var(--remember))",
+          todo: "hsl(var(--todo))",
+          ai: "hsl(var(--ai-suggested))",
+        },
         surface: {
           elevated: "hsl(var(--surface-elevated))",
           sunken: "hsl(var(--surface-sunken))",
