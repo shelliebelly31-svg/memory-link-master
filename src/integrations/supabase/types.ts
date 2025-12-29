@@ -261,7 +261,12 @@ export type Database = {
           created_at: string
           id: string
           manual_item_id: string | null
+          next_send_at: string | null
+          original_send_at: string | null
           remember_item_id: string | null
+          repeat_dates: string[] | null
+          repeat_days: number[] | null
+          repeat_type: string | null
           send_at: string
           status: Database["public"]["Enums"]["reminder_status"]
           user_id: string
@@ -271,7 +276,12 @@ export type Database = {
           created_at?: string
           id?: string
           manual_item_id?: string | null
+          next_send_at?: string | null
+          original_send_at?: string | null
           remember_item_id?: string | null
+          repeat_dates?: string[] | null
+          repeat_days?: number[] | null
+          repeat_type?: string | null
           send_at: string
           status?: Database["public"]["Enums"]["reminder_status"]
           user_id: string
@@ -281,7 +291,12 @@ export type Database = {
           created_at?: string
           id?: string
           manual_item_id?: string | null
+          next_send_at?: string | null
+          original_send_at?: string | null
           remember_item_id?: string | null
+          repeat_dates?: string[] | null
+          repeat_days?: number[] | null
+          repeat_type?: string | null
           send_at?: string
           status?: Database["public"]["Enums"]["reminder_status"]
           user_id?: string
