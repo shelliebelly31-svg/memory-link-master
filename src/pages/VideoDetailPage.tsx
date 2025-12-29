@@ -283,27 +283,6 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           </div>
         )}
 
-        {/* Quick Add Row */}
-        <div className="px-4 py-3 flex gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full gap-1.5 text-remember border-remember/30 hover:bg-remember/10"
-            onClick={handleOpenReminderManual}
-          >
-            <Brain className="h-4 w-4" />
-            Add Reminder
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            className="rounded-full gap-1.5 text-todo border-todo/30 hover:bg-todo/10"
-            onClick={handleOpenTodoManual}
-          >
-            <CheckSquare className="h-4 w-4" />
-            Add To Do
-          </Button>
-        </div>
 
         {/* No transcript CTA */}
         {segments.length === 0 && (
@@ -379,6 +358,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onHighlightsUpdated={handleHighlightsUpdated}
                   onOpenReminderSheet={handleOpenReminderFromSelection}
                   onOpenTodoSheet={handleOpenTodoFromSelection}
+                  getCurrentTime={playerTimeRef.current || undefined}
                 />
               </TabsContent>
               

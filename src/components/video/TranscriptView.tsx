@@ -14,8 +14,9 @@ interface TranscriptViewProps {
   aiSuggestionsGenerated: boolean;
   onAddHighlight: (type: HighlightType, text: string, startSeconds: number, endSeconds: number) => void;
   onHighlightsUpdated: () => void;
-  onOpenReminderSheet?: (text: string, timestamp: number) => void;
-  onOpenTodoSheet?: (text: string, timestamp: number) => void;
+  onOpenReminderSheet: (text: string, timestamp: number) => void;
+  onOpenTodoSheet: (text: string, timestamp: number) => void;
+  getCurrentTime?: () => number | null;
 }
 
 interface SelectionState {
@@ -33,6 +34,7 @@ export function TranscriptView({
   onHighlightsUpdated,
   onOpenReminderSheet,
   onOpenTodoSheet,
+  getCurrentTime,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -113,22 +115,36 @@ export function TranscriptView({
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [highlightMode, processSelection]);
 
-  const handleOpenReminder = () => {
-    if (!selection) return;
-    if (onOpenReminderSheet) {
-      onOpenReminderSheet(selection.text, selection.startSeconds);
-    }
+  // Clear selection helper
+  const clearSelection = () => {
     setSelection(null);
     window.getSelection()?.removeAllRanges();
   };
 
-  const handleOpenTodo = () => {
-    if (!selection) return;
-    if (onOpenTodoSheet) {
-      onOpenTodoSheet(selection.text, selection.startSeconds);
+  // Handle reminder button tap
+  const handleReminderTap = () => {
+    if (selection && highlightMode) {
+      // With selection: open sheet prefilled
+      onOpenReminderSheet(selection.text, selection.startSeconds);
+      clearSelection();
+    } else {
+      // No selection: open empty sheet (manual entry)
+      const timestamp = getCurrentTime?.() ?? 0;
+      onOpenReminderSheet('', timestamp);
     }
-    setSelection(null);
-    window.getSelection()?.removeAllRanges();
+  };
+
+  // Handle todo button tap
+  const handleTodoTap = () => {
+    if (selection && highlightMode) {
+      // With selection: open sheet prefilled
+      onOpenTodoSheet(selection.text, selection.startSeconds);
+      clearSelection();
+    } else {
+      // No selection: open empty sheet (manual entry)
+      const timestamp = getCurrentTime?.() ?? 0;
+      onOpenTodoSheet('', timestamp);
+    }
   };
 
   // Render text with existing highlights marked
@@ -162,10 +178,13 @@ export function TranscriptView({
     );
   };
 
+  const hasSelection = selection && highlightMode;
+
   return (
     <div className="relative pb-32" ref={containerRef}>
-      {/* Highlight Mode Toggle */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4">
+      {/* Sticky Header: Toggle + Quick Add Buttons */}
+      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4 -mx-4 px-4 pt-1">
+        {/* Highlight Mode Toggle Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             {highlightMode ? (
@@ -188,40 +207,48 @@ export function TranscriptView({
             ? 'Select text, then choose Reminder or To Do' 
             : 'Normal scroll and copy behavior.'}
         </p>
-      </div>
 
-      {/* Fixed Bottom Action Bar - Only shown when text is selected in highlight mode */}
-      {selection && highlightMode && (
-        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up">
-          <div className="bg-background/95 backdrop-blur-lg border-t border-border shadow-lg">
-            <div className="max-w-2xl mx-auto px-4 py-3">
-              <p className="text-xs text-muted-foreground mb-2 line-clamp-1 text-center">
-                "{selection.text.slice(0, 80)}{selection.text.length > 80 ? '...' : ''}"
-              </p>
-              <div className="flex gap-3 justify-center">
-                <Button
-                  variant="remember"
-                  size="default"
-                  onClick={handleOpenReminder}
-                  className="flex-1 max-w-[160px]"
-                >
-                  <Brain className="h-4 w-4" />
-                  Reminder
-                </Button>
-                <Button
-                  variant="todo"
-                  size="default"
-                  onClick={handleOpenTodo}
-                  className="flex-1 max-w-[160px]"
-                >
-                  <CheckSquare className="h-4 w-4" />
-                  To Do
-                </Button>
-              </div>
-            </div>
-          </div>
+        {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
+        <div className="flex gap-2 mt-3">
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "rounded-full gap-1.5 flex-1",
+              hasSelection 
+                ? "text-primary-foreground bg-remember border-remember hover:bg-remember/90" 
+                : "text-remember border-remember/30 hover:bg-remember/10"
+            )}
+            onClick={handleReminderTap}
+          >
+            <Brain className="h-4 w-4" />
+            {hasSelection ? 'Save as Reminder' : 'Add Reminder'}
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className={cn(
+              "rounded-full gap-1.5 flex-1",
+              hasSelection 
+                ? "text-primary-foreground bg-todo border-todo hover:bg-todo/90" 
+                : "text-todo border-todo/30 hover:bg-todo/10"
+            )}
+            onClick={handleTodoTap}
+          >
+            <CheckSquare className="h-4 w-4" />
+            {hasSelection ? 'Save as To Do' : 'Add To Do'}
+          </Button>
         </div>
-      )}
+
+        {/* Selection preview when text is selected */}
+        {hasSelection && (
+          <div className="mt-2 p-2 bg-muted/50 rounded-lg border border-border">
+            <p className="text-xs text-muted-foreground line-clamp-2">
+              "{selection.text.slice(0, 120)}{selection.text.length > 120 ? '...' : ''}"
+            </p>
+          </div>
+        )}
+      </div>
 
       {/* Transcript Segments */}
       <div className={cn("space-y-2", highlightMode && "select-text cursor-text")}>
