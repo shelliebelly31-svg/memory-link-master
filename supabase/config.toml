@@ -1,1 +1,7 @@
 project_id = "trmcgpjsweacadqoadlh"
+
+[functions.add-video]
+verify_jwt = false
+
+[functions.ai-process]
+verify_jwt = false

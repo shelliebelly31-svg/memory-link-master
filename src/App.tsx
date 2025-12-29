@@ -1,44 +1,38 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import LibraryPage from "./pages/LibraryPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import NotFound from "./pages/NotFound";
-import { useToast } from '@/hooks/use-toast';
 
 const queryClient = new QueryClient();
 
 function AppRoutes() {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const navigate = useNavigate();
-  const { toast } = useToast();
+  const { user, loading, signIn, signUp, signOut } = useAuth();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
 
   const handleAuth = async (email: string, password: string, isSignUp: boolean) => {
-    // Simulate authentication
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    setIsAuthenticated(true);
-    toast({
-      title: isSignUp ? 'Account created!' : 'Welcome back!',
-      description: 'You are now signed in',
-    });
-    navigate('/library');
+    if (isSignUp) {
+      const { error } = await signUp(email, password);
+      if (error) throw error;
+    } else {
+      const { error } = await signIn(email, password);
+      if (error) throw error;
+    }
   };
 
-  const handleLogout = () => {
-    setIsAuthenticated(false);
-    toast({
-      title: 'Signed out',
-      description: 'See you next time!',
-    });
-    navigate('/');
-  };
-
-  if (!isAuthenticated) {
+  if (!user) {
     return (
       <Routes>
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
@@ -50,8 +44,8 @@ function AppRoutes() {
   return (
     <Routes>
       <Route path="/" element={<Navigate to="/library" replace />} />
-      <Route path="/library" element={<LibraryPage onLogout={handleLogout} />} />
-      <Route path="/video/:id" element={<VideoDetailPage onLogout={handleLogout} />} />
+      <Route path="/library" element={<LibraryPage onLogout={signOut} />} />
+      <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
@@ -59,13 +53,15 @@ function AppRoutes() {
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <AppRoutes />
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <AppRoutes />
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 
