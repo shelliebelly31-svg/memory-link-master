@@ -1,7 +1,16 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Play, Clock, CheckCircle, Loader2, AlertCircle } from 'lucide-react';
-import { Video, VideoStatus } from '@/hooks/useVideos';
+import { Play, Clock, CheckCircle, Loader2, AlertCircle, RotateCcw } from 'lucide-react';
+import { Video, VideoStatus, useRetryVideo } from '@/hooks/useVideos';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '0:00';
@@ -16,7 +25,15 @@ interface VideoCardProps {
   video: Video;
 }
 
-function getStatusBadge(status: VideoStatus) {
+function StatusBadge({ 
+  status, 
+  errorMessage, 
+  onErrorClick 
+}: { 
+  status: VideoStatus; 
+  errorMessage: string | null;
+  onErrorClick?: () => void;
+}) {
   switch (status) {
     case 'ready':
       return (
@@ -41,25 +58,52 @@ function getStatusBadge(status: VideoStatus) {
       );
     case 'failed':
       return (
-        <Badge className="bg-destructive/20 text-destructive border-destructive/30">
+        <Badge 
+          className="bg-destructive/20 text-destructive border-destructive/30 cursor-pointer hover:bg-destructive/30 transition-colors"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            onErrorClick?.();
+          }}
+        >
           <AlertCircle className="h-3 w-3 mr-1" />
-          Failed
+          Failed - Tap for details
         </Badge>
       );
   }
 }
 
 export function VideoCard({ video }: VideoCardProps) {
+  const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const retryMutation = useRetryVideo();
+  
   const isClickable = video.status === 'ready';
+  const isFailed = video.status === 'failed';
+
+  const handleRetry = (e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setErrorDialogOpen(false);
+    retryMutation.mutate({ 
+      videoId: video.id, 
+      fromStep: video.failed_step || undefined 
+    });
+  };
 
   const content = (
     <div className="card-interactive overflow-hidden">
       <div className="relative aspect-video bg-muted">
-        <img
-          src={video.thumbnail_url}
-          alt={video.title}
-          className="w-full h-full object-cover"
-        />
+        {video.thumbnail_url ? (
+          <img
+            src={video.thumbnail_url}
+            alt={video.title}
+            className="w-full h-full object-cover"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center bg-muted">
+            <Play className="h-8 w-8 text-muted-foreground" />
+          </div>
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent" />
         <div className="absolute bottom-2 right-2 bg-black/70 text-white text-xs px-2 py-0.5 rounded font-mono">
           {formatDuration(video.duration_seconds)}
@@ -77,7 +121,11 @@ export function VideoCard({ video }: VideoCardProps) {
           {video.title}
         </h3>
         <div className="flex items-center justify-between">
-          {getStatusBadge(video.status)}
+          <StatusBadge 
+            status={video.status} 
+            errorMessage={video.error_message}
+            onErrorClick={() => setErrorDialogOpen(true)}
+          />
           <span className="text-xs text-muted-foreground">
             {new Date(video.created_at).toLocaleDateString()}
           </span>
@@ -86,13 +134,57 @@ export function VideoCard({ video }: VideoCardProps) {
     </div>
   );
 
-  if (isClickable) {
-    return (
-      <Link to={`/video/${video.id}`} className="block">
-        {content}
-      </Link>
-    );
-  }
+  return (
+    <>
+      {isClickable ? (
+        <Link to={`/video/${video.id}`} className="block">
+          {content}
+        </Link>
+      ) : (
+        <div className={isFailed ? '' : 'opacity-75'}>{content}</div>
+      )}
 
-  return <div className="opacity-75">{content}</div>;
+      <Dialog open={errorDialogOpen} onOpenChange={setErrorDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <AlertCircle className="h-5 w-5" />
+              Processing Failed
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              {video.error_message || 'An unknown error occurred while processing this video.'}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {video.failed_step && (
+            <div className="text-sm text-muted-foreground">
+              Failed at step: <span className="font-medium capitalize">{video.failed_step}</span>
+            </div>
+          )}
+          
+          <div className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setErrorDialogOpen(false)}
+            >
+              Close
+            </Button>
+            <Button
+              className="flex-1 gap-2"
+              onClick={handleRetry}
+              disabled={retryMutation.isPending}
+            >
+              {retryMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RotateCcw className="h-4 w-4" />
+              )}
+              Retry
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 }

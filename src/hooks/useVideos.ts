@@ -15,6 +15,8 @@ export interface Video {
   duration_seconds: number | null;
   status: VideoStatus;
   error_message: string | null;
+  failed_step: string | null;
+  captions_missing: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -256,6 +258,52 @@ export function useAddVideo() {
     onError: (error: Error) => {
       toast({
         title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+export function useRetryVideo() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { session } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({ videoId, fromStep }: { videoId: string; fromStep?: string }) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({ 
+            retry_video_id: videoId,
+            retry_from_step: fromStep
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to retry');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      toast({
+        title: 'Retrying...',
+        description: 'Processing will begin shortly.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Retry failed',
         description: error.message,
         variant: 'destructive',
       });

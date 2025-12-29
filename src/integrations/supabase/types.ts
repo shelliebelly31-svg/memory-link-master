@@ -305,9 +305,11 @@ export type Database = {
       }
       videos: {
         Row: {
+          captions_missing: boolean
           created_at: string
           duration_seconds: number | null
           error_message: string | null
+          failed_step: string | null
           id: string
           status: Database["public"]["Enums"]["video_status"]
           thumbnail_url: string | null
@@ -318,9 +320,11 @@ export type Database = {
           youtube_url: string
         }
         Insert: {
+          captions_missing?: boolean
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          failed_step?: string | null
           id?: string
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
@@ -331,9 +335,11 @@ export type Database = {
           youtube_url: string
         }
         Update: {
+          captions_missing?: boolean
           created_at?: string
           duration_seconds?: number | null
           error_message?: string | null
+          failed_step?: string | null
           id?: string
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
