@@ -1,4 +1,5 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
@@ -52,6 +53,13 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const updateScheduleMutation = useUpdateRememberSchedule();
   const updateTaskMutation = useUpdateTaskStatus();
   const convertHighlightMutation = useConvertHighlight();
+  const queryClient = useQueryClient();
+
+  // Callback to refresh highlights after AI suggestions update
+  const handleHighlightsUpdated = useCallback(() => {
+    queryClient.invalidateQueries({ queryKey: ['highlights', id] });
+    queryClient.invalidateQueries({ queryKey: ['video', id] });
+  }, [queryClient, id]);
 
   const aiSuggestedHighlights = useMemo(
     () => highlights.filter(h => h.type === 'ai_suggested'),
@@ -301,7 +309,10 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                     text: s.text,
                   }))}
                   highlights={highlights}
+                  videoId={video.id}
+                  aiSuggestionsGenerated={video.ai_suggestions_generated || false}
                   onAddHighlight={handleAddHighlight}
+                  onHighlightsUpdated={handleHighlightsUpdated}
                 />
               </TabsContent>
               

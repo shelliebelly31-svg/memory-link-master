@@ -10,7 +10,10 @@ import { AISuggestionsPanel } from './AISuggestionsPanel';
 interface TranscriptViewProps {
   segments: TranscriptSegment[];
   highlights: Highlight[];
+  videoId: string;
+  aiSuggestionsGenerated: boolean;
   onAddHighlight: (type: HighlightType, text: string, startSeconds: number, endSeconds: number) => void;
+  onHighlightsUpdated: () => void;
 }
 
 interface SelectionState {
@@ -20,7 +23,7 @@ interface SelectionState {
   position: { x: number; y: number };
 }
 
-export function TranscriptView({ segments, highlights, onAddHighlight }: TranscriptViewProps) {
+export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGenerated, onAddHighlight, onHighlightsUpdated }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -252,9 +255,11 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
 
       {/* AI Suggestions Panel - Separate from selection */}
       <AISuggestionsPanel
-        segments={segments}
+        videoId={videoId}
+        aiSuggestionsGenerated={aiSuggestionsGenerated}
         highlights={highlights}
         onConvert={onAddHighlight}
+        onSuggestionsUpdated={onHighlightsUpdated}
       />
     </div>
   );

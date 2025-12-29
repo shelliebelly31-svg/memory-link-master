@@ -7,13 +7,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Normalize text for deduplication: lowercase, trim, collapse whitespace
+function normalizeText(text: string): string {
+  return text.toLowerCase().trim().replace(/\s+/g, ' ');
+}
+
+// Simple hash function for text deduplication
+function hashText(text: string): string {
+  const normalized = normalizeText(text);
+  let hash = 0;
+  for (let i = 0; i < normalized.length; i++) {
+    const char = normalized.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32bit integer
+  }
+  return hash.toString(16);
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
   try {
-    const { action, highlight_id, selected_text, video_id } = await req.json();
+    const { action, highlight_id, selected_text, video_id, force_regenerate } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
@@ -43,6 +60,173 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    if (action === 'generate-suggestions') {
+      console.log('generate-suggestions called for video:', video_id, 'force:', force_regenerate);
+      
+      // Check if suggestions already generated (unless force regenerate)
+      if (!force_regenerate) {
+        const { data: video } = await supabase
+          .from('videos')
+          .select('ai_suggestions_generated')
+          .eq('id', video_id)
+          .eq('user_id', user.id)
+          .single();
+        
+        if (video?.ai_suggestions_generated) {
+          console.log('AI suggestions already generated, skipping');
+          return new Response(
+            JSON.stringify({ skipped: true, message: 'Suggestions already generated' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+
+      // Get transcript segments
+      const { data: segments } = await supabase
+        .from('transcript_segments')
+        .select('id, text, start_seconds, end_seconds')
+        .eq('video_id', video_id)
+        .order('start_seconds');
+
+      if (!segments?.length) {
+        return new Response(
+          JSON.stringify({ error: 'No transcript segments found' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Get existing highlights for context
+      const { data: existingHighlights } = await supabase
+        .from('highlights')
+        .select('selected_text, text_hash')
+        .eq('video_id', video_id)
+        .eq('user_id', user.id);
+
+      const existingHashes = new Set(existingHighlights?.map(h => h.text_hash).filter(Boolean) || []);
+
+      // Prepare transcript context
+      const transcriptText = segments.map(s => s.text).join('\n');
+
+      // Generate AI suggestions
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You analyze video transcripts and suggest key passages worth remembering or acting on.
+Return JSON with "suggestions" array. Each suggestion has:
+- "text": exact quote from transcript (use verbatim text)
+- "type": either "remember" (key info) or "todo" (action item)
+- "reason": brief explanation why this is important
+Find 3-5 most important passages. Focus on:
+- Key definitions, facts, or concepts (remember)
+- Action items, steps, or things to do (todo)
+- Important warnings or tips
+Do not modify the original text, quote it exactly.`
+            },
+            {
+              role: 'user',
+              content: `Analyze this transcript and suggest highlights:\n\n${transcriptText}`
+            }
+          ],
+          response_format: { type: 'json_object' },
+        }),
+      });
+
+      if (!response.ok) {
+        console.error('AI error:', await response.text());
+        if (response.status === 429) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (response.status === 402) {
+          return new Response(
+            JSON.stringify({ error: 'AI credits exhausted.' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: 'AI processing failed' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const aiResult = await response.json();
+      const content = JSON.parse(aiResult.choices[0].message.content);
+      const suggestions = content.suggestions || [];
+      
+      let insertedCount = 0;
+      let skippedCount = 0;
+
+      for (const suggestion of suggestions) {
+        const textHash = hashText(suggestion.text);
+        
+        // Skip if duplicate
+        if (existingHashes.has(textHash)) {
+          console.log('Skipping duplicate suggestion:', suggestion.text.substring(0, 50));
+          skippedCount++;
+          continue;
+        }
+
+        // Find matching segment for timestamps
+        const matchingSegment = segments.find(s => 
+          s.text.toLowerCase().includes(normalizeText(suggestion.text).substring(0, 30))
+        ) || segments.find(s =>
+          normalizeText(suggestion.text).includes(s.text.toLowerCase().substring(0, 30))
+        );
+
+        const startSeconds = matchingSegment?.start_seconds || 0;
+        const endSeconds = matchingSegment?.end_seconds || startSeconds + 10;
+
+        const { error: insertError } = await supabase
+          .from('highlights')
+          .insert({
+            video_id: video_id,
+            user_id: user.id,
+            type: 'ai_suggested',
+            selected_text: suggestion.text,
+            text_hash: textHash,
+            start_seconds: startSeconds,
+            end_seconds: endSeconds,
+          });
+
+        if (insertError) {
+          console.error('Insert error:', insertError);
+        } else {
+          existingHashes.add(textHash);
+          insertedCount++;
+        }
+      }
+
+      // Mark video as having AI suggestions generated
+      await supabase
+        .from('videos')
+        .update({
+          ai_suggestions_generated: true,
+          ai_suggestions_generated_at: new Date().toISOString(),
+        })
+        .eq('id', video_id)
+        .eq('user_id', user.id);
+
+      console.log(`Generated ${insertedCount} suggestions, skipped ${skippedCount} duplicates`);
+      
+      return new Response(
+        JSON.stringify({ 
+          suggestions_created: insertedCount,
+          duplicates_skipped: skippedCount 
+        }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
