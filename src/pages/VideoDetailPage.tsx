@@ -11,8 +11,8 @@ import { TodoTab } from '@/components/video/TodoTab';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
-import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
-import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
+import { AddReminderSheet } from '@/components/manual/AddReminderSheet';
+import { AddTodoSheet } from '@/components/manual/AddTodoSheet';
 import { 
   useVideo, 
   useTranscriptSegments, 
@@ -40,12 +40,14 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('transcript');
-  const [showDebug, setShowDebug] = useState(true); // Debug panel visible
+  const [showDebug, setShowDebug] = useState(true);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
+  const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
+  const [prefillTimestamp, setPrefillTimestamp] = useState<number | undefined>();
   
   // Ref for getting current playback time
-  const playerTimeRef = useRef<() => number | null>(() => null);
+  const playerTimeRef = useRef<(() => number | null) | null>(null);
 
   // Fetch real data from database
   const { data: video, isLoading: videoLoading, error: videoError } = useVideo(id || '');
@@ -72,6 +74,33 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     () => highlights.filter(h => h.type === 'ai_suggested'),
     [highlights]
   );
+
+  // Handler for opening reminder sheet from transcript selection
+  const handleOpenReminderFromSelection = useCallback((text: string, timestamp: number) => {
+    setPrefillTitle(text);
+    setPrefillTimestamp(timestamp);
+    setAddReminderOpen(true);
+  }, []);
+
+  // Handler for opening todo sheet from transcript selection
+  const handleOpenTodoFromSelection = useCallback((text: string, timestamp: number) => {
+    setPrefillTitle(text);
+    setPrefillTimestamp(timestamp);
+    setAddTodoOpen(true);
+  }, []);
+
+  // Clear prefill when manually opening sheets
+  const handleOpenReminderManual = useCallback(() => {
+    setPrefillTitle(undefined);
+    setPrefillTimestamp(undefined);
+    setAddReminderOpen(true);
+  }, []);
+
+  const handleOpenTodoManual = useCallback(() => {
+    setPrefillTitle(undefined);
+    setPrefillTimestamp(undefined);
+    setAddTodoOpen(true);
+  }, []);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
@@ -189,6 +218,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     video_title: video.title,
   }));
 
+  // Check if there's a selection active (for hiding top buttons)
+  const hasSelection = false; // This would need to be lifted from TranscriptView if needed
+
   return (
     <PageLayout onLogout={onLogout}>
       <div className="flex flex-col">
@@ -244,7 +276,10 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         {/* Video Player */}
         {video.youtube_id && !video.youtube_id.startsWith('manual-') && (
           <div className="px-4 pt-4">
-            <YouTubePlayer videoId={video.youtube_id} onTimeRef={(getTime) => { playerTimeRef.current = getTime; }} />
+            <YouTubePlayer 
+              videoId={video.youtube_id} 
+              onTimeRef={(getTime) => { playerTimeRef.current = getTime; }} 
+            />
           </div>
         )}
 
@@ -254,7 +289,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
             variant="outline"
             size="sm"
             className="rounded-full gap-1.5 text-remember border-remember/30 hover:bg-remember/10"
-            onClick={() => setAddReminderOpen(true)}
+            onClick={handleOpenReminderManual}
           >
             <Brain className="h-4 w-4" />
             Add Reminder
@@ -263,7 +298,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
             variant="outline"
             size="sm"
             className="rounded-full gap-1.5 text-todo border-todo/30 hover:bg-todo/10"
-            onClick={() => setAddTodoOpen(true)}
+            onClick={handleOpenTodoManual}
           >
             <CheckSquare className="h-4 w-4" />
             Add To Do
@@ -342,6 +377,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   aiSuggestionsGenerated={video.ai_suggestions_generated || false}
                   onAddHighlight={handleAddHighlight}
                   onHighlightsUpdated={handleHighlightsUpdated}
+                  onOpenReminderSheet={handleOpenReminderFromSelection}
+                  onOpenTodoSheet={handleOpenTodoFromSelection}
                 />
               </TabsContent>
               
@@ -381,20 +418,24 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         )}
       </div>
 
-      {/* Manual Item Dialogs */}
-      <AddReminderDialog
+      {/* Manual Item Sheets */}
+      <AddReminderSheet
         open={addReminderOpen}
         onOpenChange={setAddReminderOpen}
         videoId={video?.id}
         videoTitle={video?.title}
-        getCurrentTime={playerTimeRef.current}
+        getCurrentTime={playerTimeRef.current || undefined}
+        prefillTitle={prefillTitle}
+        prefillTimestamp={prefillTimestamp}
       />
-      <AddTodoDialog
+      <AddTodoSheet
         open={addTodoOpen}
         onOpenChange={setAddTodoOpen}
         videoId={video?.id}
         videoTitle={video?.title}
-        getCurrentTime={playerTimeRef.current}
+        getCurrentTime={playerTimeRef.current || undefined}
+        prefillTitle={prefillTitle}
+        prefillTimestamp={prefillTimestamp}
       />
     </PageLayout>
   );

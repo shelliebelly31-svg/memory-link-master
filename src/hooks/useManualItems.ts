@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from '@/hooks/use-toast';
 
+export type RepeatType = 'one_time' | 'daily' | 'weekly' | 'biweekly' | 'monthly' | 'custom_days' | 'multiple_dates';
+
 export interface ManualItem {
   id: string;
   user_id: string;
@@ -67,6 +69,9 @@ export function useCreateManualReminder() {
       video_id?: string;
       timestamp_seconds?: number;
       schedule_at?: Date;
+      repeat_type?: RepeatType;
+      repeat_days?: number[];
+      repeat_dates?: Date[];
     }) => {
       // Create manual item
       const { data: item, error: itemError } = await supabase
@@ -92,8 +97,15 @@ export function useCreateManualReminder() {
             user_id: user!.id,
             manual_item_id: item.id,
             send_at: data.schedule_at.toISOString(),
-            channel: 'sms',
-            status: 'scheduled',
+            channel: 'sms' as const,
+            status: 'scheduled' as const,
+            repeat_type: data.repeat_type || 'one_time',
+            original_send_at: data.schedule_at.toISOString(),
+            next_send_at: data.schedule_at.toISOString(),
+            repeat_days: data.repeat_type === 'custom_days' ? data.repeat_days : null,
+            repeat_dates: data.repeat_type === 'multiple_dates' && data.repeat_dates 
+              ? data.repeat_dates.map(d => d.toISOString()) 
+              : null,
           });
 
         if (scheduleError) throw scheduleError;

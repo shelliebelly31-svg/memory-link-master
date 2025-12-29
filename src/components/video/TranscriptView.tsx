@@ -14,6 +14,8 @@ interface TranscriptViewProps {
   aiSuggestionsGenerated: boolean;
   onAddHighlight: (type: HighlightType, text: string, startSeconds: number, endSeconds: number) => void;
   onHighlightsUpdated: () => void;
+  onOpenReminderSheet?: (text: string, timestamp: number) => void;
+  onOpenTodoSheet?: (text: string, timestamp: number) => void;
 }
 
 interface SelectionState {
@@ -22,7 +24,16 @@ interface SelectionState {
   endSeconds: number;
 }
 
-export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGenerated, onAddHighlight, onHighlightsUpdated }: TranscriptViewProps) {
+export function TranscriptView({ 
+  segments, 
+  highlights, 
+  videoId, 
+  aiSuggestionsGenerated, 
+  onAddHighlight, 
+  onHighlightsUpdated,
+  onOpenReminderSheet,
+  onOpenTodoSheet,
+}: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -102,10 +113,20 @@ export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGen
     return () => document.removeEventListener('selectionchange', handleSelectionChange);
   }, [highlightMode, processSelection]);
 
-  const handleHighlight = (type: 'remember' | 'todo') => {
+  const handleOpenReminder = () => {
     if (!selection) return;
-    
-    onAddHighlight(type, selection.text, selection.startSeconds, selection.endSeconds);
+    if (onOpenReminderSheet) {
+      onOpenReminderSheet(selection.text, selection.startSeconds);
+    }
+    setSelection(null);
+    window.getSelection()?.removeAllRanges();
+  };
+
+  const handleOpenTodo = () => {
+    if (!selection) return;
+    if (onOpenTodoSheet) {
+      onOpenTodoSheet(selection.text, selection.startSeconds);
+    }
     setSelection(null);
     window.getSelection()?.removeAllRanges();
   };
@@ -164,7 +185,7 @@ export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGen
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           {highlightMode 
-            ? 'Select text to highlight it as Remember or To Do.' 
+            ? 'Select text, then choose Reminder or To Do' 
             : 'Normal scroll and copy behavior.'}
         </p>
       </div>
@@ -181,16 +202,16 @@ export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGen
                 <Button
                   variant="remember"
                   size="default"
-                  onClick={() => handleHighlight('remember')}
+                  onClick={handleOpenReminder}
                   className="flex-1 max-w-[160px]"
                 >
                   <Brain className="h-4 w-4" />
-                  Remember
+                  Reminder
                 </Button>
                 <Button
                   variant="todo"
                   size="default"
-                  onClick={() => handleHighlight('todo')}
+                  onClick={handleOpenTodo}
                   className="flex-1 max-w-[160px]"
                 >
                   <CheckSquare className="h-4 w-4" />
