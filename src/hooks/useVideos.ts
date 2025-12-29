@@ -5,6 +5,14 @@ import { useToast } from '@/hooks/use-toast';
 
 export type VideoStatus = 'queued' | 'transcribing' | 'ready' | 'failed' | 'needs_attention';
 
+// Display-friendly status that groups queued/transcribing as "Processing"
+export type DisplayStatus = 'processing' | 'ready' | 'needs_attention' | 'failed';
+
+export function getDisplayStatus(status: VideoStatus): DisplayStatus {
+  if (status === 'queued' || status === 'transcribing') return 'processing';
+  return status as DisplayStatus;
+}
+
 export interface Video {
   id: string;
   user_id: string;
@@ -703,6 +711,109 @@ export function useConvertHighlight() {
       toast({
         title: `Converted to ${variables.toType === 'remember' ? 'Remember' : 'Task'}`,
         description: 'Item has been converted successfully',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+export function useAddVideoWithSources() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { session } = useAuth();
+
+  return useMutation({
+    mutationFn: async (data: {
+      youtube_url?: string;
+      transcript_text?: string;
+      screenshot_base64_list?: string[];
+    }) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify(data),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add video');
+      }
+
+      return response.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      toast({
+        title: 'Video added!',
+        description: 'Your video is being processed. This may take a moment.',
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: 'Error',
+        description: error.message,
+        variant: 'destructive',
+      });
+    },
+  });
+}
+
+export function useAddTranscriptToVideo() {
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+  const { session } = useAuth();
+
+  return useMutation({
+    mutationFn: async ({
+      videoId,
+      transcript_text,
+      screenshot_base64_list,
+    }: {
+      videoId: string;
+      transcript_text?: string;
+      screenshot_base64_list?: string[];
+    }) => {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${session?.access_token}`,
+          },
+          body: JSON.stringify({
+            add_transcript_to_video_id: videoId,
+            transcript_text,
+            screenshot_base64_list,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const error = await response.json();
+        throw new Error(error.error || 'Failed to add transcript');
+      }
+
+      return response.json();
+    },
+    onSuccess: (_, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['videos'] });
+      queryClient.invalidateQueries({ queryKey: ['video', variables.videoId] });
+      toast({
+        title: 'Transcript added!',
+        description: 'Your video is now ready.',
       });
     },
     onError: (error: Error) => {
