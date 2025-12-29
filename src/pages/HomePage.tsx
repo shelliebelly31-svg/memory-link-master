@@ -1,15 +1,17 @@
 import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, MessageSquare, Calendar, Loader2 } from 'lucide-react';
+import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, MessageSquare, Calendar, Loader2, Plus } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAllRememberItems, useAllTasks, useAllQuizItems, RememberItemWithVideo, TaskWithVideo } from '@/hooks/useHomeData';
+import { useAllRememberItems, useAllTasks, useAllQuizItems, useAllRemindersCombined, RememberItemWithVideo, TaskWithVideo, CombinedReminder } from '@/hooks/useHomeData';
 import { ReminderCard } from '@/components/home/ReminderCard';
 import { CombinedTasksSheet } from '@/components/home/CombinedTasksSheet';
 import { DailyQuizSheet } from '@/components/home/DailyQuizSheet';
 import { TextMeDialog } from '@/components/home/TextMeDialog';
+import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
+import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
 
 interface HomePageProps {
   onLogout: () => void;
@@ -44,9 +46,11 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const [quizOpen, setQuizOpen] = useState(false);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [textMeOpen, setTextMeOpen] = useState(false);
-  const [selectedReminder, setSelectedReminder] = useState<RememberItemWithVideo | null>(null);
+  const [selectedReminder, setSelectedReminder] = useState<CombinedReminder | null>(null);
+  const [addReminderOpen, setAddReminderOpen] = useState(false);
+  const [addTodoOpen, setAddTodoOpen] = useState(false);
 
-  const { data: rememberItems = [], isLoading: loadingReminders } = useAllRememberItems();
+  const { data: rememberItems = [], isLoading: loadingReminders } = useAllRemindersCombined();
   const { data: allTasks = [], isLoading: loadingTasks } = useAllTasks();
   const { data: quizItems = [], isLoading: loadingQuiz } = useAllQuizItems();
 
@@ -103,7 +107,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
     navigate(`/video/${videoId}${timestamp ? `?t=${timestamp}` : ''}`);
   };
 
-  const handleTextMe = (reminder: RememberItemWithVideo) => {
+  const handleTextMe = (reminder: CombinedReminder) => {
     setSelectedReminder(reminder);
     setTextMeOpen(true);
   };
@@ -138,6 +142,28 @@ export default function HomePage({ onLogout }: HomePageProps) {
           </div>
         ) : (
           <>
+            {/* Quick Add Buttons */}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full gap-1.5 text-remember border-remember/30 hover:bg-remember/10"
+                onClick={() => setAddReminderOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add Reminder
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="rounded-full gap-1.5 text-todo border-todo/30 hover:bg-todo/10"
+                onClick={() => setAddTodoOpen(true)}
+              >
+                <Plus className="h-4 w-4" />
+                Add To Do
+              </Button>
+            </div>
+
             {/* Section 1: Today's Reminders */}
             <section className="space-y-4">
               <div className="flex items-center justify-between">
@@ -301,6 +327,16 @@ export default function HomePage({ onLogout }: HomePageProps) {
         open={textMeOpen}
         onOpenChange={setTextMeOpen}
         reminder={selectedReminder}
+      />
+
+      <AddReminderDialog
+        open={addReminderOpen}
+        onOpenChange={setAddReminderOpen}
+      />
+
+      <AddTodoDialog
+        open={addTodoOpen}
+        onOpenChange={setAddTodoOpen}
       />
     </PageLayout>
   );

@@ -1,4 +1,4 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus } from 'lucide-react';
@@ -11,6 +11,8 @@ import { TodoTab } from '@/components/video/TodoTab';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
+import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
+import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
 import { 
   useVideo, 
   useTranscriptSegments, 
@@ -39,6 +41,11 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
 
   const [activeTab, setActiveTab] = useState('transcript');
   const [showDebug, setShowDebug] = useState(true); // Debug panel visible
+  const [addReminderOpen, setAddReminderOpen] = useState(false);
+  const [addTodoOpen, setAddTodoOpen] = useState(false);
+  
+  // Ref for getting current playback time
+  const playerTimeRef = useRef<() => number | null>(() => null);
 
   // Fetch real data from database
   const { data: video, isLoading: videoLoading, error: videoError } = useVideo(id || '');
@@ -237,9 +244,31 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         {/* Video Player */}
         {video.youtube_id && !video.youtube_id.startsWith('manual-') && (
           <div className="px-4 pt-4">
-            <YouTubePlayer videoId={video.youtube_id} />
+            <YouTubePlayer videoId={video.youtube_id} onTimeRef={(getTime) => { playerTimeRef.current = getTime; }} />
           </div>
         )}
+
+        {/* Quick Add Row */}
+        <div className="px-4 py-3 flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full gap-1.5 text-remember border-remember/30 hover:bg-remember/10"
+            onClick={() => setAddReminderOpen(true)}
+          >
+            <Brain className="h-4 w-4" />
+            Add Reminder
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            className="rounded-full gap-1.5 text-todo border-todo/30 hover:bg-todo/10"
+            onClick={() => setAddTodoOpen(true)}
+          >
+            <CheckSquare className="h-4 w-4" />
+            Add To Do
+          </Button>
+        </div>
 
         {/* No transcript CTA */}
         {segments.length === 0 && (
@@ -351,6 +380,22 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           </Tabs>
         )}
       </div>
+
+      {/* Manual Item Dialogs */}
+      <AddReminderDialog
+        open={addReminderOpen}
+        onOpenChange={setAddReminderOpen}
+        videoId={video?.id}
+        videoTitle={video?.title}
+        getCurrentTime={playerTimeRef.current}
+      />
+      <AddTodoDialog
+        open={addTodoOpen}
+        onOpenChange={setAddTodoOpen}
+        videoId={video?.id}
+        videoTitle={video?.title}
+        getCurrentTime={playerTimeRef.current}
+      />
     </PageLayout>
   );
 }

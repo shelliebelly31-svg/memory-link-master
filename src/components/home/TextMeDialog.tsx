@@ -11,12 +11,12 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { RememberItemWithVideo, useUserProfile, useUpdateUserProfile, useCreateReminderSchedule } from '@/hooks/useHomeData';
+import { CombinedReminder, useUserProfile, useUpdateUserProfile, useCreateReminderSchedule } from '@/hooks/useHomeData';
 
 interface TextMeDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  reminder: RememberItemWithVideo | null;
+  reminder: CombinedReminder | null;
 }
 
 type QuickOption = 'later_today' | 'tomorrow_morning' | 'this_weekend' | 'custom';
@@ -85,8 +85,14 @@ export function TextMeDialog({ open, onOpenChange, reminder }: TextMeDialogProps
       return;
     }
 
+    // Only works for highlight-based reminders
+    if (!reminder.remember_item_id) {
+      // For manual reminders, we'd need separate handling
+      return;
+    }
+
     createReminder.mutate({
-      remember_item_id: reminder.id,
+      remember_item_id: reminder.remember_item_id,
       send_at: sendAt,
     }, {
       onSuccess: () => {
