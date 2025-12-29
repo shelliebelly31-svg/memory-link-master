@@ -14,12 +14,16 @@ function extractVideoId(url: string): string | null {
   if (shortMatch) return shortMatch[1];
   
   // Handle youtube.com links with v parameter
-  const urlObj = new URL(url);
-  if (urlObj.hostname.includes('youtube.com')) {
-    const videoId = urlObj.searchParams.get('v');
-    if (videoId && videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
-      return videoId;
+  try {
+    const urlObj = new URL(url);
+    if (urlObj.hostname.includes('youtube.com')) {
+      const videoId = urlObj.searchParams.get('v');
+      if (videoId && videoId.match(/^[a-zA-Z0-9_-]{11}$/)) {
+        return videoId;
+      }
     }
+  } catch (e) {
+    // Continue to other patterns
   }
   
   // Handle embed links
@@ -29,9 +33,76 @@ function extractVideoId(url: string): string | null {
   return null;
 }
 
-// Create canonical YouTube URL (removes tracking params like si)
+// Create canonical YouTube URL
 function getCanonicalUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
+}
+
+// Parse timestamps from transcript text
+// Supports formats: 00:00, 0:00, 00:00:00, [00:00], (00:00)
+function parseTranscriptText(text: string): Array<{start: number, end: number, text: string}> {
+  const lines = text.split('\n').filter(line => line.trim());
+  const segments: Array<{start: number, end: number, text: string}> = [];
+  
+  const timestampRegex = /^[\[\(]?(\d{1,2}:)?(\d{1,2}):(\d{2})[\]\)]?\s*[-–:]?\s*/;
+  
+  let currentStart = 0;
+  let currentText = '';
+  
+  for (const line of lines) {
+    const match = line.match(timestampRegex);
+    
+    if (match) {
+      // Save previous segment if exists
+      if (currentText.trim()) {
+        segments.push({
+          start: currentStart,
+          end: currentStart + 30, // Default segment length
+          text: currentText.trim(),
+        });
+      }
+      
+      // Parse new timestamp
+      const hours = match[1] ? parseInt(match[1].replace(':', '')) : 0;
+      const minutes = parseInt(match[2]);
+      const seconds = parseInt(match[3]);
+      currentStart = hours * 3600 + minutes * 60 + seconds;
+      currentText = line.replace(timestampRegex, '').trim();
+    } else {
+      // Append to current segment
+      currentText += ' ' + line.trim();
+    }
+  }
+  
+  // Save last segment
+  if (currentText.trim()) {
+    segments.push({
+      start: currentStart,
+      end: currentStart + 30,
+      text: currentText.trim(),
+    });
+  }
+  
+  // If no timestamps found, create segments based on paragraph breaks
+  if (segments.length === 0 && text.trim()) {
+    const paragraphs = text.split(/\n\n+/).filter(p => p.trim());
+    let currentTime = 0;
+    for (const para of paragraphs) {
+      segments.push({
+        start: currentTime,
+        end: currentTime + 30,
+        text: para.replace(/\n/g, ' ').trim(),
+      });
+      currentTime += 30;
+    }
+  }
+  
+  // Update end times to match next segment's start
+  for (let i = 0; i < segments.length - 1; i++) {
+    segments[i].end = segments[i + 1].start;
+  }
+  
+  return segments;
 }
 
 serve(async (req) => {
@@ -40,7 +111,14 @@ serve(async (req) => {
   }
 
   try {
-    const { youtube_url, retry_video_id, retry_from_step } = await req.json();
+    const { 
+      youtube_url, 
+      transcript_text, 
+      screenshot_base64_list,
+      retry_video_id, 
+      retry_from_step,
+      add_transcript_to_video_id,
+    } = await req.json();
     
     // Get auth header
     const authHeader = req.headers.get('Authorization');
@@ -64,6 +142,93 @@ serve(async (req) => {
       return new Response(
         JSON.stringify({ error: 'Invalid token' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Handle adding transcript to existing video (for needs_attention state)
+    if (add_transcript_to_video_id) {
+      const { data: existingVideo, error: fetchError } = await supabase
+        .from('videos')
+        .select('*')
+        .eq('id', add_transcript_to_video_id)
+        .eq('user_id', user.id)
+        .single();
+
+      if (fetchError || !existingVideo) {
+        return new Response(
+          JSON.stringify({ error: 'Video not found or access denied' }),
+          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Process transcript text or screenshots
+      let segments: Array<{start: number, end: number, text: string}> = [];
+      let sourceType = 'manual';
+
+      if (transcript_text && transcript_text.trim()) {
+        segments = parseTranscriptText(transcript_text);
+        sourceType = 'manual';
+      } else if (screenshot_base64_list && screenshot_base64_list.length > 0) {
+        const ocrText = await processScreenshotsOCR(screenshot_base64_list);
+        if (ocrText) {
+          segments = parseTranscriptText(ocrText);
+          sourceType = 'upload';
+        }
+      }
+
+      if (segments.length === 0) {
+        return new Response(
+          JSON.stringify({ error: 'Could not extract transcript from provided input' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Delete existing segments if any
+      await supabase
+        .from('transcript_segments')
+        .delete()
+        .eq('video_id', add_transcript_to_video_id);
+
+      // Insert new segments
+      const segmentRows = segments.map(seg => ({
+        video_id: add_transcript_to_video_id,
+        start_seconds: seg.start,
+        end_seconds: seg.end,
+        text: seg.text,
+      }));
+
+      const { error: segmentError } = await supabase
+        .from('transcript_segments')
+        .insert(segmentRows);
+
+      if (segmentError) {
+        console.error('Segment insert error:', segmentError);
+        return new Response(
+          JSON.stringify({ error: 'Failed to save transcript' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Update video status
+      await supabase
+        .from('videos')
+        .update({
+          status: 'ready',
+          source_type: sourceType,
+          error_message: null,
+          failed_step: null,
+          captions_missing: false,
+        })
+        .eq('id', add_transcript_to_video_id);
+
+      // Generate AI suggestions in background
+      generateAISuggestions(add_transcript_to_video_id, segments, supabase).catch(e => 
+        console.error('AI suggestions error:', e)
+      );
+
+      return new Response(
+        JSON.stringify({ success: true, video_id: add_transcript_to_video_id }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
@@ -97,7 +262,7 @@ serve(async (req) => {
       console.log('Retrying video:', retry_video_id, 'from step:', retry_from_step);
       
       // Process in background
-      processVideo(retry_video_id, existingVideo.youtube_id, supabase, retry_from_step).catch(e => 
+      processVideoFromLink(retry_video_id, existingVideo.youtube_id, supabase, retry_from_step).catch(e => 
         console.error('Retry processing error:', e)
       );
 
@@ -107,59 +272,71 @@ serve(async (req) => {
       );
     }
 
-    // New video case - validate URL
-    if (!youtube_url) {
+    // New video case - validate we have at least one source
+    const hasLink = youtube_url && youtube_url.trim();
+    const hasText = transcript_text && transcript_text.trim();
+    const hasScreenshots = screenshot_base64_list && screenshot_base64_list.length > 0;
+
+    if (!hasLink && !hasText && !hasScreenshots) {
       return new Response(
-        JSON.stringify({ error: 'YouTube URL is required' }),
+        JSON.stringify({ error: 'Please provide a video link, paste transcript text, or upload screenshots' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    // Extract and validate video ID
+    // Determine source type and extract video ID if link provided
     let videoId: string | null = null;
-    try {
-      videoId = extractVideoId(youtube_url);
-    } catch (e) {
-      console.error('URL parsing error:', e);
+    let canonicalUrl = '';
+    let sourceType = 'manual';
+
+    if (hasLink) {
+      try {
+        videoId = extractVideoId(youtube_url);
+      } catch (e) {
+        console.error('URL parsing error:', e);
+      }
+
+      if (!videoId) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid YouTube URL. Please use a link like youtube.com/watch?v=... or youtu.be/...' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      canonicalUrl = getCanonicalUrl(videoId);
+      sourceType = 'link';
+
+      // Check if video already exists for this user
+      const { data: existingVideo } = await supabase
+        .from('videos')
+        .select('id, status')
+        .eq('user_id', user.id)
+        .eq('youtube_id', videoId)
+        .maybeSingle();
+
+      if (existingVideo) {
+        return new Response(
+          JSON.stringify({ 
+            error: 'You already have this video in your library',
+            existing_video_id: existingVideo.id
+          }),
+          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    } else if (hasScreenshots) {
+      sourceType = 'upload';
     }
 
-    if (!videoId) {
-      return new Response(
-        JSON.stringify({ error: 'Invalid YouTube URL. Please use a link like youtube.com/watch?v=... or youtu.be/...' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create canonical URL
-    const canonicalUrl = getCanonicalUrl(videoId);
-
-    // Check if video already exists for this user
-    const { data: existingVideo } = await supabase
-      .from('videos')
-      .select('id, status')
-      .eq('user_id', user.id)
-      .eq('youtube_id', videoId)
-      .maybeSingle();
-
-    if (existingVideo) {
-      return new Response(
-        JSON.stringify({ 
-          error: 'You already have this video in your library',
-          existing_video_id: existingVideo.id
-        }),
-        { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Create video record with queued status
+    // Create video record
     const { data: video, error: insertError } = await supabase
       .from('videos')
       .insert({
         user_id: user.id,
-        youtube_url: canonicalUrl,
-        youtube_id: videoId,
-        title: 'Loading...',
+        youtube_url: canonicalUrl || 'manual-entry',
+        youtube_id: videoId || `manual-${Date.now()}`,
+        title: 'Processing...',
         status: 'queued',
+        source_type: sourceType,
       })
       .select()
       .single();
@@ -172,10 +349,26 @@ serve(async (req) => {
       );
     }
 
-    console.log('Video created:', video.id);
+    console.log('Video created:', video.id, 'source_type:', sourceType);
 
-    // Trigger processing in background
-    processVideo(video.id, videoId, supabase).catch(e => console.error('Background processing error:', e));
+    // Priority A: Transcript text provided
+    if (hasText) {
+      processFromText(video.id, transcript_text, videoId, supabase).catch(e => 
+        console.error('Text processing error:', e)
+      );
+    }
+    // Priority B: Screenshots provided
+    else if (hasScreenshots) {
+      processFromScreenshots(video.id, screenshot_base64_list, videoId, supabase).catch(e => 
+        console.error('Screenshot processing error:', e)
+      );
+    }
+    // Priority C: Only link provided
+    else if (hasLink && videoId) {
+      processVideoFromLink(video.id, videoId, supabase).catch(e => 
+        console.error('Link processing error:', e)
+      );
+    }
 
     return new Response(
       JSON.stringify({ video }),
@@ -192,7 +385,225 @@ serve(async (req) => {
   }
 });
 
-async function processVideo(videoId: string, youtubeId: string, supabase: any, startFromStep?: string) {
+// Priority A: Process from pasted transcript text
+async function processFromText(videoId: string, transcriptText: string, youtubeId: string | null, supabase: any) {
+  try {
+    await supabase
+      .from('videos')
+      .update({ status: 'transcribing' })
+      .eq('id', videoId);
+
+    // If we have a YouTube ID, fetch metadata
+    if (youtubeId) {
+      const metadata = await fetchVideoMetadata(youtubeId);
+      if (metadata.success) {
+        await supabase
+          .from('videos')
+          .update({
+            title: metadata.title,
+            thumbnail_url: metadata.thumbnail_url,
+            duration_seconds: metadata.duration_seconds,
+          })
+          .eq('id', videoId);
+      }
+    }
+
+    // Parse transcript text
+    const segments = parseTranscriptText(transcriptText);
+
+    if (segments.length === 0) {
+      await supabase
+        .from('videos')
+        .update({
+          status: 'failed',
+          failed_step: 'parsing',
+          error_message: 'Could not parse transcript text. Please check the format.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Insert segments
+    const segmentRows = segments.map(seg => ({
+      video_id: videoId,
+      start_seconds: seg.start,
+      end_seconds: seg.end,
+      text: seg.text,
+    }));
+
+    const { error: segmentError } = await supabase
+      .from('transcript_segments')
+      .insert(segmentRows);
+
+    if (segmentError) {
+      console.error('Segment insert error:', segmentError);
+      await supabase
+        .from('videos')
+        .update({
+          status: 'failed',
+          failed_step: 'saving',
+          error_message: 'Failed to save transcript segments.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Update title if not set from metadata
+    const { data: currentVideo } = await supabase
+      .from('videos')
+      .select('title')
+      .eq('id', videoId)
+      .single();
+
+    const duration = segments[segments.length - 1]?.end || 0;
+    
+    await supabase
+      .from('videos')
+      .update({
+        status: 'ready',
+        title: currentVideo?.title === 'Processing...' ? 'Manual Transcript' : currentVideo?.title,
+        duration_seconds: Math.ceil(duration),
+        source_type: 'manual',
+      })
+      .eq('id', videoId);
+
+    console.log('Text transcript saved with', segments.length, 'segments');
+
+    // Generate AI suggestions
+    await generateAISuggestions(videoId, segments, supabase);
+
+  } catch (error: unknown) {
+    console.error('Error processing text:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    await supabase
+      .from('videos')
+      .update({
+        status: 'failed',
+        failed_step: 'unknown',
+        error_message: errorMessage,
+      })
+      .eq('id', videoId);
+  }
+}
+
+// Priority B: Process from screenshots with OCR
+async function processFromScreenshots(videoId: string, screenshots: string[], youtubeId: string | null, supabase: any) {
+  try {
+    await supabase
+      .from('videos')
+      .update({ status: 'transcribing' })
+      .eq('id', videoId);
+
+    // If we have a YouTube ID, fetch metadata
+    if (youtubeId) {
+      const metadata = await fetchVideoMetadata(youtubeId);
+      if (metadata.success) {
+        await supabase
+          .from('videos')
+          .update({
+            title: metadata.title,
+            thumbnail_url: metadata.thumbnail_url,
+            duration_seconds: metadata.duration_seconds,
+          })
+          .eq('id', videoId);
+      }
+    }
+
+    // Run OCR on screenshots
+    const extractedText = await processScreenshotsOCR(screenshots);
+
+    if (!extractedText || !extractedText.trim()) {
+      await supabase
+        .from('videos')
+        .update({
+          status: 'failed',
+          failed_step: 'ocr',
+          error_message: 'Could not extract text from screenshots. Please ensure the images contain readable text.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Parse the OCR text
+    const segments = parseTranscriptText(extractedText);
+
+    if (segments.length === 0) {
+      await supabase
+        .from('videos')
+        .update({
+          status: 'failed',
+          failed_step: 'parsing',
+          error_message: 'Could not parse transcript from extracted text.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Insert segments
+    const segmentRows = segments.map(seg => ({
+      video_id: videoId,
+      start_seconds: seg.start,
+      end_seconds: seg.end,
+      text: seg.text,
+    }));
+
+    const { error: segmentError } = await supabase
+      .from('transcript_segments')
+      .insert(segmentRows);
+
+    if (segmentError) {
+      console.error('Segment insert error:', segmentError);
+      await supabase
+        .from('videos')
+        .update({
+          status: 'failed',
+          failed_step: 'saving',
+          error_message: 'Failed to save transcript segments.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Update video
+    const { data: currentVideo } = await supabase
+      .from('videos')
+      .select('title')
+      .eq('id', videoId)
+      .single();
+
+    const duration = segments[segments.length - 1]?.end || 0;
+
+    await supabase
+      .from('videos')
+      .update({
+        status: 'ready',
+        title: currentVideo?.title === 'Processing...' ? 'Screenshot Transcript' : currentVideo?.title,
+        duration_seconds: Math.ceil(duration),
+        source_type: 'upload',
+      })
+      .eq('id', videoId);
+
+    console.log('Screenshot transcript saved with', segments.length, 'segments');
+
+    // Generate AI suggestions
+    await generateAISuggestions(videoId, segments, supabase);
+
+  } catch (error: unknown) {
+    console.error('Error processing screenshots:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    await supabase
+      .from('videos')
+      .update({
+        status: 'failed',
+        failed_step: 'unknown',
+        error_message: errorMessage,
+      })
+      .eq('id', videoId);
+  }
+}
+
+// Priority C: Process from YouTube link
+async function processVideoFromLink(videoId: string, youtubeId: string, supabase: any, startFromStep?: string) {
   const steps = ['metadata', 'captions', 'ai_suggestions'];
   const startIndex = startFromStep ? steps.indexOf(startFromStep) : 0;
   
@@ -239,16 +650,18 @@ async function processVideo(videoId: string, youtubeId: string, supabase: any, s
       const transcript = await fetchYouTubeCaptions(youtubeId);
       
       if (!transcript || transcript.length === 0) {
-        // Mark captions as missing
+        // Captions not found - set to needs_attention instead of failed
         await supabase
           .from('videos')
           .update({ 
             captions_missing: true,
-            status: 'failed',
+            status: 'needs_attention',
             failed_step: 'captions',
-            error_message: 'No captions available for this video. YouTube captions (automatic or manual) are required. Try a video with closed captions enabled.'
+            error_message: 'No captions available for this video. Please add the transcript manually by pasting text or uploading screenshots.'
           })
           .eq('id', videoId);
+        
+        console.log('Captions not found, set to needs_attention');
         return;
       }
 
@@ -300,11 +713,10 @@ async function processVideo(videoId: string, youtubeId: string, supabase: any, s
       console.log('Transcript saved with', segments.length, 'segments');
     }
 
-    // Step 3: Generate AI suggestions (optional, doesn't fail the video)
+    // Step 3: Generate AI suggestions
     if (startIndex <= 2) {
       console.log('Step 3: Generating AI suggestions for video:', videoId);
       
-      // Fetch transcript for AI processing
       const { data: segments } = await supabase
         .from('transcript_segments')
         .select('*')
@@ -336,6 +748,63 @@ async function processVideo(videoId: string, youtubeId: string, supabase: any, s
       })
       .eq('id', videoId);
   }
+}
+
+async function processScreenshotsOCR(screenshots: string[]): Promise<string> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('No LOVABLE_API_KEY, cannot process OCR');
+    return '';
+  }
+
+  const allText: string[] = [];
+
+  for (const base64Image of screenshots) {
+    try {
+      // Use vision model to extract text
+      const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: 'Extract all text from this image. Preserve timestamps if present (like 0:00, 1:30, etc). Return only the extracted text, nothing else.',
+                },
+                {
+                  type: 'image_url',
+                  image_url: {
+                    url: base64Image.startsWith('data:') ? base64Image : `data:image/jpeg;base64,${base64Image}`,
+                  },
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const extractedText = result.choices?.[0]?.message?.content;
+        if (extractedText) {
+          allText.push(extractedText);
+        }
+      } else {
+        console.error('OCR request failed:', response.status);
+      }
+    } catch (error) {
+      console.error('Error processing screenshot:', error);
+    }
+  }
+
+  return allText.join('\n\n');
 }
 
 async function fetchVideoMetadata(youtubeId: string): Promise<{
@@ -374,7 +843,6 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
 
 async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
   try {
-    // Fetch the YouTube video page to get caption track info
     const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
     const response = await fetch(videoUrl, {
       headers: {
@@ -383,14 +851,12 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     });
     const html = await response.text();
     
-    // Extract captions URL from the page
     const captionMatch = html.match(/"captionTracks":\s*\[(.*?)\]/);
     if (!captionMatch) {
       console.log('No caption tracks found in page');
       return [];
     }
 
-    // Parse caption track info
     let captionData;
     try {
       captionData = JSON.parse(`[${captionMatch[1]}]`);
@@ -403,7 +869,6 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
       return [];
     }
 
-    // Prefer English captions, then auto-generated, then any available
     let captionTrack = captionData.find((t: any) => t.languageCode === 'en' && !t.kind) 
       || captionData.find((t: any) => t.languageCode === 'en')
       || captionData.find((t: any) => !t.kind)
@@ -414,11 +879,9 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
       return [];
     }
 
-    // Fetch the actual captions
     const captionResponse = await fetch(captionTrack.baseUrl);
     const captionXml = await captionResponse.text();
     
-    // Parse XML captions
     const segments: Array<{start: number, end: number, text: string}> = [];
     const textMatches = captionXml.matchAll(/<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([^<]*)<\/text>/g);
     
@@ -443,7 +906,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
       }
     }
 
-    // Combine short segments for better readability (aim for ~15-30 second chunks)
+    // Combine short segments
     const combinedSegments: Array<{start: number, end: number, text: string}> = [];
     let currentSegment: {start: number, end: number, text: string} | null = null;
     
@@ -534,7 +997,7 @@ async function generateAISuggestions(videoId: string, transcript: Array<{start: 
       return;
     }
 
-    // Delete existing AI suggestions if retrying
+    // Delete existing AI suggestions
     await supabase
       .from('highlights')
       .delete()

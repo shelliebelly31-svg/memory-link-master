@@ -311,6 +311,7 @@ export type Database = {
           error_message: string | null
           failed_step: string | null
           id: string
+          source_type: string | null
           status: Database["public"]["Enums"]["video_status"]
           thumbnail_url: string | null
           title: string
@@ -326,6 +327,7 @@ export type Database = {
           error_message?: string | null
           failed_step?: string | null
           id?: string
+          source_type?: string | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
           title?: string
@@ -341,6 +343,7 @@ export type Database = {
           error_message?: string | null
           failed_step?: string | null
           id?: string
+          source_type?: string | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
           title?: string
@@ -362,7 +365,12 @@ export type Database = {
       highlight_type: "remember" | "todo" | "ai_suggested"
       review_schedule: "daily" | "weekly" | "monthly"
       task_status: "pending" | "in_progress" | "completed"
-      video_status: "queued" | "transcribing" | "ready" | "failed"
+      video_status:
+        | "queued"
+        | "transcribing"
+        | "ready"
+        | "failed"
+        | "needs_attention"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -493,7 +501,13 @@ export const Constants = {
       highlight_type: ["remember", "todo", "ai_suggested"],
       review_schedule: ["daily", "weekly", "monthly"],
       task_status: ["pending", "in_progress", "completed"],
-      video_status: ["queued", "transcribing", "ready", "failed"],
+      video_status: [
+        "queued",
+        "transcribing",
+        "ready",
+        "failed",
+        "needs_attention",
+      ],
     },
   },
 } as const

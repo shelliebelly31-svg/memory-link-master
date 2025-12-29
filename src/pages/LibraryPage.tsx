@@ -6,13 +6,13 @@ import { AddVideoDialog } from '@/components/video/AddVideoDialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useVideos, useAddVideo } from '@/hooks/useVideos';
+import { useVideos, useAddVideoWithSources } from '@/hooks/useVideos';
 
 interface LibraryPageProps {
   onLogout: () => void;
 }
 
-type FilterStatus = 'all' | 'ready' | 'transcribing' | 'queued' | 'failed';
+type FilterStatus = 'all' | 'ready' | 'transcribing' | 'queued' | 'failed' | 'needs_attention';
 
 export default function LibraryPage({ onLogout }: LibraryPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -20,7 +20,7 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
   const [showFilters, setShowFilters] = useState(false);
 
   const { data: videos = [], isLoading } = useVideos();
-  const addVideo = useAddVideo();
+  const addVideo = useAddVideoWithSources();
 
   const filteredVideos = useMemo(() => {
     return videos.filter(video => {
@@ -36,6 +36,7 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
     transcribing: videos.filter(v => v.status === 'transcribing').length,
     queued: videos.filter(v => v.status === 'queued').length,
     failed: videos.filter(v => v.status === 'failed').length,
+    needs_attention: videos.filter(v => v.status === 'needs_attention').length,
   }), [videos]);
 
   return (
@@ -48,7 +49,7 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
               {videos.length} videos saved
             </p>
           </div>
-          <AddVideoDialog onAddVideo={async (url) => { await addVideo.mutateAsync(url); }} />
+          <AddVideoDialog onAddVideo={async (data) => { await addVideo.mutateAsync(data); }} />
         </div>
 
         <div className="space-y-3">
@@ -69,7 +70,7 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
 
           {showFilters && (
             <div className="flex gap-2 flex-wrap animate-fade-up">
-              {(['all', 'ready', 'transcribing', 'queued', 'failed'] as const).map((status) => (
+              {(['all', 'ready', 'transcribing', 'queued', 'needs_attention', 'failed'] as const).map((status) => (
                 <Button key={status} variant={filterStatus === status ? 'default' : 'outline'} size="sm" onClick={() => setFilterStatus(status)} className="capitalize">
                   {status === 'all' ? 'All' : status}
                   <Badge variant="secondary" className="ml-2 text-xs">{statusCounts[status]}</Badge>
