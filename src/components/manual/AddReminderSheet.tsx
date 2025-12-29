@@ -13,7 +13,6 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCreateManualReminder, type RepeatType } from '@/hooks/useManualItems';
@@ -144,7 +143,7 @@ export function AddReminderSheet({
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh] flex flex-col">
+      <DrawerContent className="max-h-[85vh] flex flex-col">
         {/* Fixed Header */}
         <DrawerHeader className="border-b border-border shrink-0">
           <DrawerTitle className="flex items-center gap-2">
@@ -155,8 +154,7 @@ export function AddReminderSheet({
         </DrawerHeader>
 
         {/* Scrollable Content */}
-        <ScrollArea className="flex-1 overflow-y-auto">
-          <div className="p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto max-h-[calc(85vh-160px)] p-4 space-y-4">
             {/* Title */}
             <div className="space-y-2">
               <Label htmlFor="reminder-title">Title</Label>
@@ -352,8 +350,7 @@ export function AddReminderSheet({
                 </div>
               )}
             </div>
-          </div>
-        </ScrollArea>
+        </div>
 
         {/* Fixed Footer */}
         <DrawerFooter className="border-t border-border shrink-0 flex-row gap-2">
