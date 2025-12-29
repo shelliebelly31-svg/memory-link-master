@@ -26,7 +26,7 @@ import {
   useConvertHighlight,
   getDisplayStatus,
 } from '@/hooks/useVideos';
-import { mockQuizItems } from '@/lib/mockData';
+
 import { HighlightType } from '@/types';
 import { cn } from '@/lib/utils';
 
@@ -40,7 +40,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const { toast } = useToast();
 
   const [activeTab, setActiveTab] = useState('transcript');
-  const [showDebug, setShowDebug] = useState(true);
+  const [showDebug, setShowDebug] = useState(false);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
@@ -379,7 +379,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                     video_title: video.title,
                     explanation: q.explanation || '',
                     topic: q.topic || '',
-                  })) : mockQuizItems.filter(q => q.video_id === id)}
+                  })) : []}
+                  videoId={video.id}
+                  rememberItemsCount={rememberItems.length}
                   onRegenerateQuestion={handleRegenerateQuestion}
                 />
               </TabsContent>

@@ -1,6 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { CheckSquare, Circle, CheckCircle2, Clock, AlertCircle, Calendar, Play, ExternalLink } from 'lucide-react';
+import { CheckSquare, Circle, CheckCircle2, Calendar, ExternalLink, Pencil, Trash2 } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -10,9 +9,20 @@ import {
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 import { TaskWithVideo, useUpdateTaskStatusGlobal } from '@/hooks/useHomeData';
+import { useUpdateTask, useDeleteTask } from '@/hooks/useItemMutations';
+import { EditTaskSheet } from '@/components/video/EditTaskSheet';
 import { cn } from '@/lib/utils';
 
 interface CombinedTasksSheetProps {
@@ -44,7 +54,12 @@ function isDueToday(dueDate: string | null): boolean {
 
 export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: CombinedTasksSheetProps) {
   const [filter, setFilter] = useState<FilterType>('all');
+  const [editTask, setEditTask] = useState<TaskWithVideo | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+  
   const updateStatus = useUpdateTaskStatusGlobal();
+  const updateMutation = useUpdateTask();
+  const deleteMutation = useDeleteTask();
 
   const filteredTasks = tasks.filter(task => {
     switch (filter) {
@@ -69,6 +84,20 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
   const handleOpenTask = (task: TaskWithVideo) => {
     onOpenChange(false);
     onOpenVideo(task.video_id, task.timestamp_seconds);
+  };
+
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null }) => {
+    updateMutation.mutate({ id, ...data }, {
+      onSuccess: () => setEditTask(null),
+    });
+  };
+
+  const handleDelete = () => {
+    if (deleteTaskId) {
+      deleteMutation.mutate(deleteTaskId, {
+        onSuccess: () => setDeleteTaskId(null),
+      });
+    }
   };
 
   const counts = {
@@ -162,13 +191,29 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
                       </div>
                     </div>
 
-                    <Button
-                      variant="ghost"
-                      size="icon-sm"
-                      onClick={() => handleOpenTask(task)}
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setEditTask(task)}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => setDeleteTaskId(task.id)}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon-sm"
+                        onClick={() => handleOpenTask(task)}
+                      >
+                        <ExternalLink className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </div>
                 </div>
               ))}
@@ -181,6 +226,33 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
           )}
         </ScrollArea>
       </SheetContent>
+
+      {/* Edit Sheet */}
+      <EditTaskSheet
+        open={!!editTask}
+        onOpenChange={(o) => !o && setEditTask(null)}
+        task={editTask}
+        onSave={handleSaveEdit}
+        isSaving={updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTaskId} onOpenChange={(o) => !o && setDeleteTaskId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this task everywhere. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Sheet>
   );
 }
