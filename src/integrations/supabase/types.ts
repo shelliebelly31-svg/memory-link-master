@@ -14,7 +14,337 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      highlights: {
+        Row: {
+          created_at: string
+          end_seconds: number
+          id: string
+          selected_text: string
+          start_seconds: number
+          type: Database["public"]["Enums"]["highlight_type"]
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_seconds: number
+          id?: string
+          selected_text: string
+          start_seconds: number
+          type: Database["public"]["Enums"]["highlight_type"]
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          end_seconds?: number
+          id?: string
+          selected_text?: string
+          start_seconds?: number
+          type?: Database["public"]["Enums"]["highlight_type"]
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "highlights_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_attempts: {
+        Row: {
+          created_at: string
+          id: string
+          score: number
+          topic: string | null
+          total_questions: number
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          score: number
+          topic?: string | null
+          total_questions: number
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          score?: number
+          topic?: string | null
+          total_questions?: number
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_attempts_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      quiz_items: {
+        Row: {
+          correct_answer: number
+          created_at: string
+          explanation: string | null
+          id: string
+          options: string[]
+          question: string
+          remember_item_id: string
+          times_answered: number
+          times_correct: number
+          topic: string | null
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          correct_answer: number
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          options: string[]
+          question: string
+          remember_item_id: string
+          times_answered?: number
+          times_correct?: number
+          topic?: string | null
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          correct_answer?: number
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          options?: string[]
+          question?: string
+          remember_item_id?: string
+          times_answered?: number
+          times_correct?: number
+          topic?: string | null
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "quiz_items_remember_item_id_fkey"
+            columns: ["remember_item_id"]
+            isOneToOne: false
+            referencedRelation: "remember_items"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "quiz_items_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      remember_items: {
+        Row: {
+          created_at: string
+          highlight_id: string
+          id: string
+          key_points: string[]
+          last_reviewed_at: string | null
+          review_schedule: Database["public"]["Enums"]["review_schedule"] | null
+          summary: string
+          timestamp_seconds: number
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          highlight_id: string
+          id?: string
+          key_points?: string[]
+          last_reviewed_at?: string | null
+          review_schedule?:
+            | Database["public"]["Enums"]["review_schedule"]
+            | null
+          summary: string
+          timestamp_seconds: number
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          highlight_id?: string
+          id?: string
+          key_points?: string[]
+          last_reviewed_at?: string | null
+          review_schedule?:
+            | Database["public"]["Enums"]["review_schedule"]
+            | null
+          summary?: string
+          timestamp_seconds?: number
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "remember_items_highlight_id_fkey"
+            columns: ["highlight_id"]
+            isOneToOne: false
+            referencedRelation: "highlights"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "remember_items_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tasks: {
+        Row: {
+          created_at: string
+          description: string | null
+          due_date: string | null
+          highlight_id: string
+          id: string
+          order_index: number
+          status: Database["public"]["Enums"]["task_status"]
+          timestamp_seconds: number
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          highlight_id: string
+          id?: string
+          order_index?: number
+          status?: Database["public"]["Enums"]["task_status"]
+          timestamp_seconds: number
+          title: string
+          user_id: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          due_date?: string | null
+          highlight_id?: string
+          id?: string
+          order_index?: number
+          status?: Database["public"]["Enums"]["task_status"]
+          timestamp_seconds?: number
+          title?: string
+          user_id?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tasks_highlight_id_fkey"
+            columns: ["highlight_id"]
+            isOneToOne: false
+            referencedRelation: "highlights"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      transcript_segments: {
+        Row: {
+          created_at: string
+          end_seconds: number
+          id: string
+          start_seconds: number
+          text: string
+          video_id: string
+        }
+        Insert: {
+          created_at?: string
+          end_seconds: number
+          id?: string
+          start_seconds: number
+          text: string
+          video_id: string
+        }
+        Update: {
+          created_at?: string
+          end_seconds?: number
+          id?: string
+          start_seconds?: number
+          text?: string
+          video_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "transcript_segments_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      videos: {
+        Row: {
+          created_at: string
+          duration_seconds: number | null
+          error_message: string | null
+          id: string
+          status: Database["public"]["Enums"]["video_status"]
+          thumbnail_url: string | null
+          title: string
+          updated_at: string
+          user_id: string
+          youtube_id: string
+          youtube_url: string
+        }
+        Insert: {
+          created_at?: string
+          duration_seconds?: number | null
+          error_message?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id: string
+          youtube_id: string
+          youtube_url: string
+        }
+        Update: {
+          created_at?: string
+          duration_seconds?: number | null
+          error_message?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["video_status"]
+          thumbnail_url?: string | null
+          title?: string
+          updated_at?: string
+          user_id?: string
+          youtube_id?: string
+          youtube_url?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +353,10 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      highlight_type: "remember" | "todo" | "ai_suggested"
+      review_schedule: "daily" | "weekly" | "monthly"
+      task_status: "pending" | "in_progress" | "completed"
+      video_status: "queued" | "transcribing" | "ready" | "failed"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +483,11 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      highlight_type: ["remember", "todo", "ai_suggested"],
+      review_schedule: ["daily", "weekly", "monthly"],
+      task_status: ["pending", "in_progress", "completed"],
+      video_status: ["queued", "transcribing", "ready", "failed"],
+    },
   },
 } as const
