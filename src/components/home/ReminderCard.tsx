@@ -2,10 +2,10 @@ import { Play, MessageSquare, Calendar, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { RememberItemWithVideo } from '@/hooks/useHomeData';
+import { CombinedReminder } from '@/hooks/useHomeData';
 
 interface ReminderCardProps {
-  reminder: RememberItemWithVideo;
+  reminder: CombinedReminder;
   index: number;
   onOpenVideo: () => void;
   onTextMe: () => void;
@@ -41,6 +41,9 @@ export function ReminderCard({ reminder, index, onOpenVideo, onTextMe }: Reminde
 
         {/* Video info */}
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          {reminder.is_manual && (
+            <Badge variant="outline" className="shrink-0 text-xs">Manual</Badge>
+          )}
           <span className="line-clamp-1 flex-1">{reminder.video_title}</span>
           {reminder.timestamp_seconds > 0 && (
             <Badge variant="secondary" className="shrink-0">

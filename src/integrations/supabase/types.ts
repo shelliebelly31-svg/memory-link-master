@@ -58,6 +58,47 @@ export type Database = {
           },
         ]
       }
+      manual_items: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          timestamp_seconds: number | null
+          title: string
+          type: string
+          user_id: string
+          video_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          timestamp_seconds?: number | null
+          title: string
+          type: string
+          user_id: string
+          video_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          timestamp_seconds?: number | null
+          title?: string
+          type?: string
+          user_id?: string
+          video_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "manual_items_video_id_fkey"
+            columns: ["video_id"]
+            isOneToOne: false
+            referencedRelation: "videos"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       quiz_attempts: {
         Row: {
           created_at: string
@@ -219,7 +260,8 @@ export type Database = {
           channel: Database["public"]["Enums"]["reminder_channel"]
           created_at: string
           id: string
-          remember_item_id: string
+          manual_item_id: string | null
+          remember_item_id: string | null
           send_at: string
           status: Database["public"]["Enums"]["reminder_status"]
           user_id: string
@@ -228,7 +270,8 @@ export type Database = {
           channel?: Database["public"]["Enums"]["reminder_channel"]
           created_at?: string
           id?: string
-          remember_item_id: string
+          manual_item_id?: string | null
+          remember_item_id?: string | null
           send_at: string
           status?: Database["public"]["Enums"]["reminder_status"]
           user_id: string
@@ -237,12 +280,20 @@ export type Database = {
           channel?: Database["public"]["Enums"]["reminder_channel"]
           created_at?: string
           id?: string
-          remember_item_id?: string
+          manual_item_id?: string | null
+          remember_item_id?: string | null
           send_at?: string
           status?: Database["public"]["Enums"]["reminder_status"]
           user_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "reminder_schedules_manual_item_id_fkey"
+            columns: ["manual_item_id"]
+            isOneToOne: false
+            referencedRelation: "manual_items"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "reminder_schedules_remember_item_id_fkey"
             columns: ["remember_item_id"]
@@ -257,9 +308,11 @@ export type Database = {
           created_at: string
           description: string | null
           due_date: string | null
-          highlight_id: string
+          highlight_id: string | null
           id: string
+          manual_item_id: string | null
           order_index: number
+          source_type: string | null
           status: Database["public"]["Enums"]["task_status"]
           timestamp_seconds: number
           title: string
@@ -270,9 +323,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           due_date?: string | null
-          highlight_id: string
+          highlight_id?: string | null
           id?: string
+          manual_item_id?: string | null
           order_index?: number
+          source_type?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           timestamp_seconds: number
           title: string
@@ -283,9 +338,11 @@ export type Database = {
           created_at?: string
           description?: string | null
           due_date?: string | null
-          highlight_id?: string
+          highlight_id?: string | null
           id?: string
+          manual_item_id?: string | null
           order_index?: number
+          source_type?: string | null
           status?: Database["public"]["Enums"]["task_status"]
           timestamp_seconds?: number
           title?: string
@@ -298,6 +355,13 @@ export type Database = {
             columns: ["highlight_id"]
             isOneToOne: false
             referencedRelation: "highlights"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tasks_manual_item_id_fkey"
+            columns: ["manual_item_id"]
+            isOneToOne: false
+            referencedRelation: "manual_items"
             referencedColumns: ["id"]
           },
           {

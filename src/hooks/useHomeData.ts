@@ -18,6 +18,20 @@ export interface RememberItemWithVideo {
   video_youtube_id: string;
 }
 
+export interface CombinedReminder {
+  id: string;
+  user_id: string;
+  video_id: string | null;
+  summary: string;
+  key_points: string[];
+  timestamp_seconds: number;
+  created_at: string;
+  video_title: string;
+  video_youtube_id: string;
+  is_manual: boolean;
+  remember_item_id?: string; // For highlight-based reminders
+}
+
 export interface TaskWithVideo {
   id: string;
   highlight_id: string;
@@ -32,6 +46,7 @@ export interface TaskWithVideo {
   created_at: string;
   video_title: string;
   video_youtube_id: string;
+  source_type?: string;
 }
 
 export interface QuizItemWithVideo {
@@ -99,6 +114,93 @@ export function useAllRememberItems() {
             video_youtube_id: video.youtube_id,
           } as RememberItemWithVideo;
         });
+    },
+    enabled: !!user,
+  });
+}
+
+// Get all reminders (highlight-based + manual) combined
+export function useAllRemindersCombined() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['all_reminders_combined', user?.id],
+    queryFn: async () => {
+      // Get remember items
+      const { data: rememberItems, error: rememberError } = await supabase
+        .from('remember_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (rememberError) throw rememberError;
+
+      // Get manual reminder items
+      const { data: manualItems, error: manualError } = await supabase
+        .from('manual_items')
+        .select('*')
+        .eq('type', 'reminder')
+        .order('created_at', { ascending: false });
+
+      if (manualError) throw manualError;
+
+      // Get all video IDs
+      const videoIds = [
+        ...new Set([
+          ...rememberItems.map(r => r.video_id),
+          ...manualItems.filter(m => m.video_id).map(m => m.video_id as string),
+        ]),
+      ];
+
+      const { data: videos, error: videosError } = await supabase
+        .from('videos')
+        .select('id, title, youtube_id, status')
+        .in('id', videoIds);
+
+      if (videosError) throw videosError;
+
+      const videoMap = new Map(videos.map(v => [v.id, v]));
+
+      // Convert remember items to combined format
+      const rememberCombined: CombinedReminder[] = rememberItems
+        .filter(item => {
+          const video = videoMap.get(item.video_id);
+          return video && video.status === 'ready';
+        })
+        .map(item => {
+          const video = videoMap.get(item.video_id)!;
+          return {
+            id: item.id,
+            user_id: item.user_id,
+            video_id: item.video_id,
+            summary: item.summary,
+            key_points: item.key_points || [],
+            timestamp_seconds: item.timestamp_seconds,
+            created_at: item.created_at,
+            video_title: video.title,
+            video_youtube_id: video.youtube_id,
+            is_manual: false,
+            remember_item_id: item.id,
+          };
+        });
+
+      // Convert manual items to combined format
+      const manualCombined: CombinedReminder[] = manualItems.map(item => {
+        const video = item.video_id ? videoMap.get(item.video_id) : null;
+        return {
+          id: item.id,
+          user_id: item.user_id,
+          video_id: item.video_id,
+          summary: item.title,
+          key_points: item.notes ? [item.notes] : [],
+          timestamp_seconds: item.timestamp_seconds || 0,
+          created_at: item.created_at,
+          video_title: video?.title || 'Manual Reminder',
+          video_youtube_id: video?.youtube_id || '',
+          is_manual: true,
+        };
+      });
+
+      return [...rememberCombined, ...manualCombined];
     },
     enabled: !!user,
   });

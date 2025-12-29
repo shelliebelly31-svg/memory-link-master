@@ -1,18 +1,80 @@
+import { useEffect, useRef, useCallback } from 'react';
+
 interface YouTubePlayerProps {
   videoId: string;
   onTimeUpdate?: (seconds: number) => void;
+  onTimeRef?: (getTime: () => number | null) => void;
 }
 
-export function YouTubePlayer({ videoId }: YouTubePlayerProps) {
+declare global {
+  interface Window {
+    YT: any;
+    onYouTubeIframeAPIReady: () => void;
+  }
+}
+
+export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef }: YouTubePlayerProps) {
+  const playerRef = useRef<any>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const getCurrentTime = useCallback((): number | null => {
+    if (playerRef.current && typeof playerRef.current.getCurrentTime === 'function') {
+      return playerRef.current.getCurrentTime();
+    }
+    return null;
+  }, []);
+
+  useEffect(() => {
+    // Load YouTube IFrame API if not already loaded
+    if (!window.YT) {
+      const tag = document.createElement('script');
+      tag.src = 'https://www.youtube.com/iframe_api';
+      const firstScriptTag = document.getElementsByTagName('script')[0];
+      firstScriptTag.parentNode?.insertBefore(tag, firstScriptTag);
+    }
+
+    const initPlayer = () => {
+      if (containerRef.current && window.YT && window.YT.Player) {
+        playerRef.current = new window.YT.Player(containerRef.current, {
+          videoId,
+          playerVars: {
+            rel: 0,
+            modestbranding: 1,
+          },
+          events: {
+            onReady: () => {
+              if (onTimeRef) {
+                onTimeRef(getCurrentTime);
+              }
+            },
+          },
+        });
+      }
+    };
+
+    if (window.YT && window.YT.Player) {
+      initPlayer();
+    } else {
+      window.onYouTubeIframeAPIReady = initPlayer;
+    }
+
+    return () => {
+      if (playerRef.current && typeof playerRef.current.destroy === 'function') {
+        playerRef.current.destroy();
+      }
+    };
+  }, [videoId, onTimeRef, getCurrentTime]);
+
+  // Report time ref after initial mount
+  useEffect(() => {
+    if (onTimeRef) {
+      onTimeRef(getCurrentTime);
+    }
+  }, [onTimeRef, getCurrentTime]);
+
   return (
     <div className="relative w-full aspect-video bg-black rounded-xl overflow-hidden shadow-lg">
-      <iframe
-        src={`https://www.youtube.com/embed/${videoId}?rel=0&modestbranding=1`}
-        title="YouTube video player"
-        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-        allowFullScreen
-        className="absolute inset-0 w-full h-full"
-      />
+      <div ref={containerRef} className="absolute inset-0 w-full h-full" />
     </div>
   );
 }
