@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Play, CheckCircle, Loader2, AlertCircle, RotateCcw, AlertTriangle, FileText } from 'lucide-react';
+import { Play, CheckCircle, Loader2, AlertCircle, RotateCcw, AlertTriangle, FileText, Trash2 } from 'lucide-react';
 import { Video, useRetryVideo, getDisplayStatus, DisplayStatus } from '@/hooks/useVideos';
+import { useDeleteVideo } from '@/hooks/useHomeData';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -10,6 +11,7 @@ import {
   DialogDescription,
   DialogHeader,
   DialogTitle,
+  DialogFooter,
 } from '@/components/ui/dialog';
 
 function formatDuration(seconds: number | null): string {
@@ -83,7 +85,9 @@ function StatusBadge({
 export function VideoCard({ video }: VideoCardProps) {
   const navigate = useNavigate();
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const retryMutation = useRetryVideo();
+  const deleteMutation = useDeleteVideo();
   
   const displayStatus = getDisplayStatus(video.status);
   const isClickable = displayStatus === 'ready';
@@ -102,6 +106,12 @@ export function VideoCard({ video }: VideoCardProps) {
 
   const handleAddTranscriptClick = () => {
     navigate(`/video/${video.id}/add-transcript`);
+  };
+
+  const handleDelete = () => {
+    deleteMutation.mutate(video.id, {
+      onSuccess: () => setDeleteDialogOpen(false),
+    });
   };
 
   const content = (
@@ -147,9 +157,23 @@ export function VideoCard({ video }: VideoCardProps) {
         )}
       </div>
       <div className="p-4 space-y-3">
-        <h3 className="font-semibold text-card-foreground line-clamp-2 leading-snug">
-          {video.title}
-        </h3>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className="font-semibold text-card-foreground line-clamp-2 leading-snug flex-1">
+            {video.title}
+          </h3>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setDeleteDialogOpen(true);
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
         <div className="flex items-center justify-between">
           <StatusBadge 
             displayStatus={displayStatus} 
@@ -214,6 +238,44 @@ export function VideoCard({ video }: VideoCardProps) {
               Retry
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-destructive">
+              <Trash2 className="h-5 w-5" />
+              Delete Video
+            </DialogTitle>
+            <DialogDescription className="pt-2">
+              This will remove the transcript, highlights, reminders, quizzes, and tasks for this video.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <DialogFooter className="flex gap-3 pt-4">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              className="flex-1"
+              onClick={handleDelete}
+              disabled={deleteMutation.isPending}
+            >
+              {deleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </>

@@ -214,6 +214,44 @@ export type Database = {
           },
         ]
       }
+      reminder_schedules: {
+        Row: {
+          channel: Database["public"]["Enums"]["reminder_channel"]
+          created_at: string
+          id: string
+          remember_item_id: string
+          send_at: string
+          status: Database["public"]["Enums"]["reminder_status"]
+          user_id: string
+        }
+        Insert: {
+          channel?: Database["public"]["Enums"]["reminder_channel"]
+          created_at?: string
+          id?: string
+          remember_item_id: string
+          send_at: string
+          status?: Database["public"]["Enums"]["reminder_status"]
+          user_id: string
+        }
+        Update: {
+          channel?: Database["public"]["Enums"]["reminder_channel"]
+          created_at?: string
+          id?: string
+          remember_item_id?: string
+          send_at?: string
+          status?: Database["public"]["Enums"]["reminder_status"]
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reminder_schedules_remember_item_id_fkey"
+            columns: ["remember_item_id"]
+            isOneToOne: false
+            referencedRelation: "remember_items"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       tasks: {
         Row: {
           created_at: string
@@ -306,6 +344,33 @@ export type Database = {
           },
         ]
       }
+      user_profiles: {
+        Row: {
+          created_at: string
+          id: string
+          phone_number: string | null
+          phone_verified: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          phone_number?: string | null
+          phone_verified?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          phone_number?: string | null
+          phone_verified?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       videos: {
         Row: {
           ai_suggestions_generated: boolean
@@ -372,6 +437,8 @@ export type Database = {
     }
     Enums: {
       highlight_type: "remember" | "todo" | "ai_suggested"
+      reminder_channel: "sms"
+      reminder_status: "scheduled" | "sent" | "failed"
       review_schedule: "daily" | "weekly" | "monthly"
       task_status: "pending" | "in_progress" | "completed"
       video_status:
@@ -508,6 +575,8 @@ export const Constants = {
   public: {
     Enums: {
       highlight_type: ["remember", "todo", "ai_suggested"],
+      reminder_channel: ["sms"],
+      reminder_status: ["scheduled", "sent", "failed"],
       review_schedule: ["daily", "weekly", "monthly"],
       task_status: ["pending", "in_progress", "completed"],
       video_status: [
