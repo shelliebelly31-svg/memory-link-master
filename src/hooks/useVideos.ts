@@ -3,6 +3,8 @@ import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from '@/hooks/use-toast';
 
+export type VideoStatus = 'queued' | 'transcribing' | 'ready' | 'failed';
+
 export interface Video {
   id: string;
   user_id: string;
@@ -10,8 +12,8 @@ export interface Video {
   youtube_id: string;
   title: string;
   thumbnail_url: string | null;
-  duration_seconds: number;
-  status: 'queued' | 'transcribing' | 'ready' | 'failed';
+  duration_seconds: number | null;
+  status: VideoStatus;
   error_message: string | null;
   created_at: string;
   updated_at: string;
