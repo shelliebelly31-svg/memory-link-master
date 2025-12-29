@@ -20,7 +20,6 @@ interface SelectionState {
   text: string;
   startSeconds: number;
   endSeconds: number;
-  position: { x: number; y: number };
 }
 
 export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGenerated, onAddHighlight, onHighlightsUpdated }: TranscriptViewProps) {
@@ -79,18 +78,10 @@ export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGen
     });
 
     if (startSeconds !== null && endSeconds !== null) {
-      // Get position for floating toolbar
-      const rect = range.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      
       setSelection({
         text: selectedText,
         startSeconds,
         endSeconds,
-        position: {
-          x: rect.left + rect.width / 2 - containerRect.left,
-          y: rect.top - containerRect.top - 10
-        }
       });
     }
   }, []);
@@ -178,37 +169,34 @@ export function TranscriptView({ segments, highlights, videoId, aiSuggestionsGen
         </p>
       </div>
 
-      {/* Selection Toolbar - Only Remember and To Do */}
+      {/* Fixed Bottom Action Bar - Only shown when text is selected in highlight mode */}
       {selection && highlightMode && (
-        <div
-          id="highlight-toolbar"
-          className="absolute z-30 animate-scale-in"
-          style={{
-            left: Math.max(10, Math.min(selection.position.x - 100, (containerRef.current?.clientWidth || 300) - 210)),
-            top: Math.max(60, selection.position.y)
-          }}
-        >
-          <div className="glass rounded-xl p-3 shadow-lg border border-border">
-            <p className="text-xs text-muted-foreground mb-2 line-clamp-2 max-w-[200px]">
-              "{selection.text.slice(0, 60)}{selection.text.length > 60 ? '...' : ''}"
-            </p>
-            <div className="flex gap-2">
-              <Button
-                variant="remember"
-                size="sm"
-                onClick={() => handleHighlight('remember')}
-              >
-                <Brain className="h-3 w-3" />
-                Remember
-              </Button>
-              <Button
-                variant="todo"
-                size="sm"
-                onClick={() => handleHighlight('todo')}
-              >
-                <CheckSquare className="h-3 w-3" />
-                To Do
-              </Button>
+        <div className="fixed bottom-0 left-0 right-0 z-50 animate-slide-up">
+          <div className="bg-background/95 backdrop-blur-lg border-t border-border shadow-lg">
+            <div className="max-w-2xl mx-auto px-4 py-3">
+              <p className="text-xs text-muted-foreground mb-2 line-clamp-1 text-center">
+                "{selection.text.slice(0, 80)}{selection.text.length > 80 ? '...' : ''}"
+              </p>
+              <div className="flex gap-3 justify-center">
+                <Button
+                  variant="remember"
+                  size="default"
+                  onClick={() => handleHighlight('remember')}
+                  className="flex-1 max-w-[160px]"
+                >
+                  <Brain className="h-4 w-4" />
+                  Remember
+                </Button>
+                <Button
+                  variant="todo"
+                  size="default"
+                  onClick={() => handleHighlight('todo')}
+                  className="flex-1 max-w-[160px]"
+                >
+                  <CheckSquare className="h-4 w-4" />
+                  To Do
+                </Button>
+              </div>
             </div>
           </div>
         </div>
