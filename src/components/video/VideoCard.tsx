@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
-import { Play, Clock, CheckCircle, Loader2, AlertCircle, RotateCcw, AlertTriangle, FileText } from 'lucide-react';
-import { Video, VideoStatus, useRetryVideo, useAddTranscriptToVideo } from '@/hooks/useVideos';
+import { Link, useNavigate } from 'react-router-dom';
+import { Play, CheckCircle, Loader2, AlertCircle, RotateCcw, AlertTriangle, FileText } from 'lucide-react';
+import { Video, useRetryVideo, getDisplayStatus, DisplayStatus } from '@/hooks/useVideos';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -11,7 +11,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { AddTranscriptDialog } from './AddTranscriptDialog';
 
 function formatDuration(seconds: number | null): string {
   if (!seconds) return '0:00';
@@ -27,17 +26,15 @@ interface VideoCardProps {
 }
 
 function StatusBadge({ 
-  status, 
-  errorMessage, 
+  displayStatus, 
   onErrorClick,
   onNeedsAttentionClick,
 }: { 
-  status: VideoStatus; 
-  errorMessage: string | null;
+  displayStatus: DisplayStatus; 
   onErrorClick?: () => void;
   onNeedsAttentionClick?: () => void;
 }) {
-  switch (status) {
+  switch (displayStatus) {
     case 'ready':
       return (
         <Badge className="bg-ai/20 text-ai border-ai/30">
@@ -45,18 +42,11 @@ function StatusBadge({
           Ready
         </Badge>
       );
-    case 'transcribing':
+    case 'processing':
       return (
         <Badge className="bg-todo/20 text-todo border-todo/30">
           <Loader2 className="h-3 w-3 mr-1 animate-spin" />
           Processing
-        </Badge>
-      );
-    case 'queued':
-      return (
-        <Badge className="bg-muted text-muted-foreground border-border">
-          <Clock className="h-3 w-3 mr-1" />
-          Queued
         </Badge>
       );
     case 'needs_attention':
@@ -91,14 +81,14 @@ function StatusBadge({
 }
 
 export function VideoCard({ video }: VideoCardProps) {
+  const navigate = useNavigate();
   const [errorDialogOpen, setErrorDialogOpen] = useState(false);
-  const [transcriptDialogOpen, setTranscriptDialogOpen] = useState(false);
   const retryMutation = useRetryVideo();
-  const addTranscriptMutation = useAddTranscriptToVideo();
   
-  const isClickable = video.status === 'ready';
-  const isFailed = video.status === 'failed';
-  const needsAttention = video.status === 'needs_attention';
+  const displayStatus = getDisplayStatus(video.status);
+  const isClickable = displayStatus === 'ready';
+  const isFailed = displayStatus === 'failed';
+  const needsAttention = displayStatus === 'needs_attention';
 
   const handleRetry = (e: React.MouseEvent) => {
     e.preventDefault();
@@ -110,14 +100,8 @@ export function VideoCard({ video }: VideoCardProps) {
     });
   };
 
-  const handleAddTranscript = async (data: {
-    transcript_text?: string;
-    screenshot_base64_list?: string[];
-  }) => {
-    await addTranscriptMutation.mutateAsync({
-      videoId: video.id,
-      ...data,
-    });
+  const handleAddTranscriptClick = () => {
+    navigate(`/video/${video.id}/add-transcript`);
   };
 
   const content = (
@@ -153,7 +137,7 @@ export function VideoCard({ video }: VideoCardProps) {
               onClick={(e) => {
                 e.preventDefault();
                 e.stopPropagation();
-                setTranscriptDialogOpen(true);
+                handleAddTranscriptClick();
               }}
             >
               <FileText className="h-4 w-4" />
@@ -168,10 +152,9 @@ export function VideoCard({ video }: VideoCardProps) {
         </h3>
         <div className="flex items-center justify-between">
           <StatusBadge 
-            status={video.status} 
-            errorMessage={video.error_message}
+            displayStatus={displayStatus} 
             onErrorClick={() => setErrorDialogOpen(true)}
-            onNeedsAttentionClick={() => setTranscriptDialogOpen(true)}
+            onNeedsAttentionClick={handleAddTranscriptClick}
           />
           <span className="text-xs text-muted-foreground">
             {new Date(video.created_at).toLocaleDateString()}
@@ -233,14 +216,6 @@ export function VideoCard({ video }: VideoCardProps) {
           </div>
         </DialogContent>
       </Dialog>
-
-      {/* Add Transcript Dialog */}
-      <AddTranscriptDialog
-        open={transcriptDialogOpen}
-        onOpenChange={setTranscriptDialogOpen}
-        onSubmit={handleAddTranscript}
-        videoTitle={video.title}
-      />
     </>
   );
 }

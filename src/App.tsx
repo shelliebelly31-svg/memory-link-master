@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import LibraryPage from "./pages/LibraryPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
+import AddTranscriptPage from "./pages/AddTranscriptPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -46,6 +47,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/library" replace />} />
       <Route path="/library" element={<LibraryPage onLogout={signOut} />} />
       <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
+      <Route path="/video/:id/add-transcript" element={<AddTranscriptPage onLogout={signOut} />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );

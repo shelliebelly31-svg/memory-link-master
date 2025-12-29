@@ -6,13 +6,13 @@ import { AddVideoDialog } from '@/components/video/AddVideoDialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useVideos, useAddVideoWithSources } from '@/hooks/useVideos';
+import { useVideos, useAddVideoWithSources, getDisplayStatus, DisplayStatus } from '@/hooks/useVideos';
 
 interface LibraryPageProps {
   onLogout: () => void;
 }
 
-type FilterStatus = 'all' | 'ready' | 'transcribing' | 'queued' | 'failed' | 'needs_attention';
+type FilterStatus = 'all' | DisplayStatus;
 
 export default function LibraryPage({ onLogout }: LibraryPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
@@ -25,18 +25,18 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
   const filteredVideos = useMemo(() => {
     return videos.filter(video => {
       const matchesSearch = video.title.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesStatus = filterStatus === 'all' || video.status === filterStatus;
+      const displayStatus = getDisplayStatus(video.status);
+      const matchesStatus = filterStatus === 'all' || displayStatus === filterStatus;
       return matchesSearch && matchesStatus;
     });
   }, [videos, searchQuery, filterStatus]);
 
   const statusCounts = useMemo(() => ({
     all: videos.length,
-    ready: videos.filter(v => v.status === 'ready').length,
-    transcribing: videos.filter(v => v.status === 'transcribing').length,
-    queued: videos.filter(v => v.status === 'queued').length,
-    failed: videos.filter(v => v.status === 'failed').length,
-    needs_attention: videos.filter(v => v.status === 'needs_attention').length,
+    ready: videos.filter(v => getDisplayStatus(v.status) === 'ready').length,
+    processing: videos.filter(v => getDisplayStatus(v.status) === 'processing').length,
+    needs_attention: videos.filter(v => getDisplayStatus(v.status) === 'needs_attention').length,
+    failed: videos.filter(v => getDisplayStatus(v.status) === 'failed').length,
   }), [videos]);
 
   return (
@@ -70,9 +70,9 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
 
           {showFilters && (
             <div className="flex gap-2 flex-wrap animate-fade-up">
-              {(['all', 'ready', 'transcribing', 'queued', 'needs_attention', 'failed'] as const).map((status) => (
+              {(['all', 'ready', 'processing', 'needs_attention', 'failed'] as const).map((status) => (
                 <Button key={status} variant={filterStatus === status ? 'default' : 'outline'} size="sm" onClick={() => setFilterStatus(status)} className="capitalize">
-                  {status === 'all' ? 'All' : status}
+                  {status === 'all' ? 'All' : status === 'needs_attention' ? 'Needs Attention' : status}
                   <Badge variant="secondary" className="ml-2 text-xs">{statusCounts[status]}</Badge>
                 </Button>
               ))}
