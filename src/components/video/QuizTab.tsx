@@ -1,16 +1,19 @@
 import { useState } from 'react';
-import { CheckCircle2, XCircle, Trophy, RotateCcw, AlertTriangle, Play } from 'lucide-react';
+import { CheckCircle2, XCircle, Trophy, RotateCcw, AlertTriangle, Play, Loader2, Sparkles } from 'lucide-react';
 import { QuizItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
+import { useTriggerQuizGeneration } from '@/hooks/useItemMutations';
 
 interface QuizTabProps {
   quizItems: QuizItem[];
+  videoId: string;
+  rememberItemsCount: number;
   onRegenerateQuestion: (questionId: string) => void;
 }
 
-export function QuizTab({ quizItems, onRegenerateQuestion }: QuizTabProps) {
+export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQuestion }: QuizTabProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
   const [showResult, setShowResult] = useState(false);
@@ -18,8 +21,10 @@ export function QuizTab({ quizItems, onRegenerateQuestion }: QuizTabProps) {
   const [isQuizStarted, setIsQuizStarted] = useState(false);
   const [isQuizComplete, setIsQuizComplete] = useState(false);
 
+  const generateQuizMutation = useTriggerQuizGeneration();
+
   const currentQuestion = quizItems[currentQuestionIndex];
-  const progress = ((currentQuestionIndex + 1) / quizItems.length) * 100;
+  const progress = quizItems.length > 0 ? ((currentQuestionIndex + 1) / quizItems.length) * 100 : 0;
 
   const weakQuestions = quizItems.filter(q => 
     q.times_answered > 0 && (q.times_correct / q.times_answered) < 0.5
@@ -56,14 +61,39 @@ export function QuizTab({ quizItems, onRegenerateQuestion }: QuizTabProps) {
     setIsQuizComplete(false);
   };
 
+  const handleGenerateQuiz = () => {
+    generateQuizMutation.mutate(videoId);
+  };
+
+  // No quiz items - show generate button if there are remember items
   if (quizItems.length === 0) {
     return (
       <div className="text-center py-12">
         <Trophy className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
         <p className="text-muted-foreground">No quiz questions yet</p>
-        <p className="text-sm text-muted-foreground/70 mt-1">
-          Add some "Remember" items to generate quiz questions
-        </p>
+        {rememberItemsCount > 0 ? (
+          <>
+            <p className="text-sm text-muted-foreground/70 mt-1 mb-4">
+              Generate quiz questions from your {rememberItemsCount} memory item{rememberItemsCount !== 1 ? 's' : ''}
+            </p>
+            <Button 
+              variant="glow" 
+              onClick={handleGenerateQuiz}
+              disabled={generateQuizMutation.isPending}
+            >
+              {generateQuizMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate Quiz
+            </Button>
+          </>
+        ) : (
+          <p className="text-sm text-muted-foreground/70 mt-1">
+            Add some "Remember" items to generate quiz questions
+          </p>
+        )}
       </div>
     );
   }
@@ -77,10 +107,25 @@ export function QuizTab({ quizItems, onRegenerateQuestion }: QuizTabProps) {
           <p className="text-muted-foreground mb-6">
             {quizItems.length} questions based on your highlights
           </p>
-          <Button variant="glow" size="lg" onClick={() => setIsQuizStarted(true)}>
-            <Play className="h-5 w-5" />
-            Start Quiz
-          </Button>
+          <div className="flex gap-3 justify-center">
+            <Button variant="glow" size="lg" onClick={() => setIsQuizStarted(true)}>
+              <Play className="h-5 w-5" />
+              Start Quiz
+            </Button>
+            <Button 
+              variant="outline" 
+              size="lg" 
+              onClick={handleGenerateQuiz}
+              disabled={generateQuizMutation.isPending}
+            >
+              {generateQuizMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Regenerate
+            </Button>
+          </div>
         </div>
 
         {weakQuestions.length > 0 && (
@@ -129,7 +174,7 @@ export function QuizTab({ quizItems, onRegenerateQuestion }: QuizTabProps) {
           {score}/{quizItems.length}
         </p>
         <p className="text-muted-foreground mb-6">
-          {percentage >= 70 ? "Great job! 🎉" : percentage >= 50 ? "Good effort! 💪" : "Keep practicing! 📚"}
+          {percentage >= 70 ? "Great job!" : percentage >= 50 ? "Good effort!" : "Keep practicing!"}
         </p>
         <Button variant="glow" onClick={handleRestart}>
           <RotateCcw className="h-4 w-4" />

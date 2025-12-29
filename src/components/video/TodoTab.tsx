@@ -1,11 +1,23 @@
 import { useState } from 'react';
-import { CheckSquare, Square, Calendar, GripVertical, ExternalLink, Plus, Sparkles } from 'lucide-react';
+import { CheckSquare, Calendar, GripVertical, ExternalLink, Plus, Sparkles, Pencil, Trash2 } from 'lucide-react';
 import { Task, Highlight } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { EditTaskSheet } from './EditTaskSheet';
+import { useUpdateTask, useDeleteTask } from '@/hooks/useItemMutations';
 
 interface TodoTabProps {
   tasks: Task[];
@@ -22,8 +34,28 @@ export function TodoTab({
   onToggleTaskStatus,
   onJumpToTimestamp,
 }: TodoTabProps) {
+  const [editTask, setEditTask] = useState<Task | null>(null);
+  const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
+
+  const updateMutation = useUpdateTask();
+  const deleteMutation = useDeleteTask();
+
   const pendingTasks = tasks.filter(t => t.status !== 'completed');
   const completedTasks = tasks.filter(t => t.status === 'completed');
+
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null }) => {
+    updateMutation.mutate({ id, ...data }, {
+      onSuccess: () => setEditTask(null),
+    });
+  };
+
+  const handleDelete = () => {
+    if (deleteTaskId) {
+      deleteMutation.mutate(deleteTaskId, {
+        onSuccess: () => setDeleteTaskId(null),
+      });
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -67,6 +99,22 @@ export function TodoTab({
                       </Badge>
                     )}
                   </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditTask(task)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeleteTaskId(task.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
                 </div>
               </div>
             </div>
@@ -123,6 +171,15 @@ export function TodoTab({
                 <div className="flex-1">
                   <h4 className="font-medium line-through">{task.title}</h4>
                 </div>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeleteTaskId(task.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
             </div>
           ))}
@@ -138,6 +195,33 @@ export function TodoTab({
           </p>
         </div>
       )}
+
+      {/* Edit Sheet */}
+      <EditTaskSheet
+        open={!!editTask}
+        onOpenChange={(open) => !open && setEditTask(null)}
+        task={editTask}
+        onSave={handleSaveEdit}
+        isSaving={updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteTaskId} onOpenChange={(open) => !open && setDeleteTaskId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete task?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this task everywhere. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

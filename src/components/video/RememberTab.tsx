@@ -1,4 +1,5 @@
-import { Brain, Clock, ExternalLink, Calendar } from 'lucide-react';
+import { useState } from 'react';
+import { Brain, Clock, ExternalLink, Calendar, Pencil, Trash2 } from 'lucide-react';
 import { RememberItem, Highlight } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
@@ -10,6 +11,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
+import { EditRememberItemSheet } from './EditRememberItemSheet';
+import { useUpdateRememberItem, useDeleteRememberItem } from '@/hooks/useItemMutations';
 
 interface RememberTabProps {
   rememberItems: RememberItem[];
@@ -26,6 +39,26 @@ export function RememberTab({
   onSetSchedule,
   onJumpToTimestamp,
 }: RememberTabProps) {
+  const [editItem, setEditItem] = useState<RememberItem | null>(null);
+  const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
+
+  const updateMutation = useUpdateRememberItem();
+  const deleteMutation = useDeleteRememberItem();
+
+  const handleSaveEdit = (id: string, data: { summary: string; key_points: string[] }) => {
+    updateMutation.mutate({ id, ...data }, {
+      onSuccess: () => setEditItem(null),
+    });
+  };
+
+  const handleDelete = () => {
+    if (deleteItemId) {
+      deleteMutation.mutate(deleteItemId, {
+        onSuccess: () => setDeleteItemId(null),
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Remember Items */}
@@ -39,13 +72,29 @@ export function RememberTab({
             <div key={item.id} className="card-elevated p-4 space-y-4">
               <div className="flex items-start justify-between gap-3">
                 <h4 className="font-medium">{item.summary}</h4>
-                <Button
-                  variant="ghost"
-                  size="icon-sm"
-                  onClick={() => onJumpToTimestamp(item.timestamp_seconds)}
-                >
-                  <ExternalLink className="h-4 w-4" />
-                </Button>
+                <div className="flex items-center gap-1">
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setEditItem(item)}
+                  >
+                    <Pencil className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => setDeleteItemId(item.id)}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
+                    onClick={() => onJumpToTimestamp(item.timestamp_seconds)}
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               
               <div className="space-y-2">
@@ -127,6 +176,33 @@ export function RememberTab({
           </p>
         </div>
       )}
+
+      {/* Edit Sheet */}
+      <EditRememberItemSheet
+        open={!!editItem}
+        onOpenChange={(open) => !open && setEditItem(null)}
+        item={editItem}
+        onSave={handleSaveEdit}
+        isSaving={updateMutation.isPending}
+      />
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteItemId} onOpenChange={(open) => !open && setDeleteItemId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete memory item?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will remove this memory item and any related quiz questions. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
