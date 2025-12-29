@@ -1,10 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Sparkles, Highlighter, MousePointer } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, MousePointer } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { AISuggestionsPanel } from './AISuggestionsPanel';
 
 interface TranscriptViewProps {
   segments: TranscriptSegment[];
@@ -31,22 +32,27 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
     );
   };
 
-  // Handle text selection using browser Selection API
-  const handleSelectionChange = useCallback(() => {
-    if (!highlightMode) return;
-
+  // Process selection and show toolbar
+  const processSelection = useCallback(() => {
     const windowSelection = window.getSelection();
-    if (!windowSelection || windowSelection.isCollapsed || !windowSelection.toString().trim()) {
+    
+    // If no valid selection, hide toolbar
+    if (!windowSelection || windowSelection.isCollapsed) {
+      setSelection(null);
       return;
     }
 
     const selectedText = windowSelection.toString().trim();
-    if (!selectedText) return;
+    if (!selectedText || selectedText.length === 0) {
+      setSelection(null);
+      return;
+    }
 
     // Find which segment(s) the selection spans
     const range = windowSelection.getRangeAt(0);
     const container = containerRef.current;
     if (!container || !container.contains(range.commonAncestorContainer)) {
+      setSelection(null);
       return;
     }
 
@@ -84,62 +90,30 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
         }
       });
     }
-  }, [highlightMode]);
+  }, []);
 
-  // Listen for selection changes
+  // Listen for selectionchange events when highlight mode is on
   useEffect(() => {
     if (!highlightMode) {
       setSelection(null);
       return;
     }
 
-    const handleMouseUp = () => {
-      // Small delay to ensure selection is complete
-      setTimeout(handleSelectionChange, 10);
+    const handleSelectionChange = () => {
+      // Small delay to let selection settle
+      requestAnimationFrame(processSelection);
     };
 
-    document.addEventListener('mouseup', handleMouseUp);
-    return () => document.removeEventListener('mouseup', handleMouseUp);
-  }, [highlightMode, handleSelectionChange]);
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [highlightMode, processSelection]);
 
-  // Clear selection when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      const toolbar = document.getElementById('highlight-toolbar');
-      if (toolbar && !toolbar.contains(e.target as Node)) {
-        // Don't clear if clicking on transcript (might be new selection)
-        if (!containerRef.current?.contains(e.target as Node)) {
-          setSelection(null);
-          window.getSelection()?.removeAllRanges();
-        }
-      }
-    };
-
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
-  const handleHighlight = (type: HighlightType) => {
+  const handleHighlight = (type: 'remember' | 'todo') => {
     if (!selection) return;
     
     onAddHighlight(type, selection.text, selection.startSeconds, selection.endSeconds);
     setSelection(null);
     window.getSelection()?.removeAllRanges();
-  };
-
-  const handleSegmentClick = (segment: TranscriptSegment) => {
-    if (!highlightMode) return;
-    
-    // If no text is selected, select the whole segment
-    const windowSelection = window.getSelection();
-    if (!windowSelection || windowSelection.isCollapsed || !windowSelection.toString().trim()) {
-      setSelection({
-        text: segment.text,
-        startSeconds: segment.start_seconds,
-        endSeconds: segment.end_seconds,
-        position: { x: 100, y: 0 } // Will be positioned relative to segment
-      });
-    }
   };
 
   // Render text with existing highlights marked
@@ -150,8 +124,7 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
       return <span>{segment.text}</span>;
     }
 
-    // For simplicity, just show visual indicators for highlighted segments
-    // The actual text selection will be handled by browser API
+    // Show visual indicators for highlighted segments
     const highlightTypes = [...new Set(segmentHighlights.map(h => h.type))];
     
     return (
@@ -175,7 +148,7 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
   };
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="relative pb-32" ref={containerRef}>
       {/* Highlight Mode Toggle */}
       <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4">
         <div className="flex items-center justify-between">
@@ -197,24 +170,24 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           {highlightMode 
-            ? 'Select text to highlight. Tap a segment to select it entirely.' 
+            ? 'Select text to highlight it as Remember or To Do.' 
             : 'Normal scroll and copy behavior.'}
         </p>
       </div>
 
-      {/* Floating Highlight Toolbar */}
+      {/* Selection Toolbar - Only Remember and To Do */}
       {selection && highlightMode && (
         <div
           id="highlight-toolbar"
           className="absolute z-30 animate-scale-in"
           style={{
-            left: Math.max(10, Math.min(selection.position.x - 140, (containerRef.current?.clientWidth || 300) - 290)),
+            left: Math.max(10, Math.min(selection.position.x - 100, (containerRef.current?.clientWidth || 300) - 210)),
             top: Math.max(60, selection.position.y)
           }}
         >
           <div className="glass rounded-xl p-3 shadow-lg border border-border">
-            <p className="text-xs text-muted-foreground mb-2 line-clamp-2 max-w-[260px]">
-              "{selection.text.slice(0, 80)}{selection.text.length > 80 ? '...' : ''}"
+            <p className="text-xs text-muted-foreground mb-2 line-clamp-2 max-w-[200px]">
+              "{selection.text.slice(0, 60)}{selection.text.length > 60 ? '...' : ''}"
             </p>
             <div className="flex gap-2">
               <Button
@@ -233,14 +206,6 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
                 <CheckSquare className="h-3 w-3" />
                 To Do
               </Button>
-              <Button
-                variant="ai"
-                size="sm"
-                onClick={() => handleHighlight('ai_suggested')}
-              >
-                <Sparkles className="h-3 w-3" />
-                Suggested
-              </Button>
             </div>
           </div>
         </div>
@@ -258,7 +223,6 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
               data-segment-id={segment.id}
               data-start={segment.start_seconds}
               data-end={segment.end_seconds}
-              onClick={() => handleSegmentClick(segment)}
               className={cn(
                 "p-4 rounded-lg transition-all duration-200 border",
                 highlightMode 
@@ -285,6 +249,13 @@ export function TranscriptView({ segments, highlights, onAddHighlight }: Transcr
           <p>No transcript segments available.</p>
         </div>
       )}
+
+      {/* AI Suggestions Panel - Separate from selection */}
+      <AISuggestionsPanel
+        segments={segments}
+        highlights={highlights}
+        onConvert={onAddHighlight}
+      />
     </div>
   );
 }
