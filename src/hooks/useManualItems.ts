@@ -171,7 +171,7 @@ export function useCreateManualReminder() {
   });
 }
 
-// Create a manual task - creates highlight + task so it shows in To Do tab
+// Create a manual task - creates task (and optionally highlight if video linked)
 export function useCreateManualTask() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
@@ -186,43 +186,28 @@ export function useCreateManualTask() {
       due_date?: string;
     }) => {
       const timestampSeconds = data.timestamp_seconds ?? 0;
+      let highlightId: string | null = null;
 
-      // 1. Create highlight record
-      const { data: highlight, error: highlightError } = await supabase
-        .from('highlights')
-        .insert({
-          video_id: data.video_id!,
-          user_id: user!.id,
-          type: 'todo' as const,
-          start_seconds: timestampSeconds,
-          end_seconds: timestampSeconds + 1,
-          selected_text: data.title,
-        })
-        .select()
-        .single();
+      // 1. Create highlight record only if video is provided
+      if (data.video_id) {
+        const { data: highlight, error: highlightError } = await supabase
+          .from('highlights')
+          .insert({
+            video_id: data.video_id,
+            user_id: user!.id,
+            type: 'todo' as const,
+            start_seconds: timestampSeconds,
+            end_seconds: timestampSeconds + 1,
+            selected_text: data.title,
+          })
+          .select()
+          .single();
 
-      if (highlightError) throw highlightError;
+        if (highlightError) throw highlightError;
+        highlightId = highlight.id;
+      }
 
-      // 2. Create task record (this shows in To Do tab)
-      const { data: task, error: taskError } = await supabase
-        .from('tasks')
-        .insert({
-          user_id: user!.id,
-          highlight_id: highlight.id,
-          video_id: data.video_id!,
-          title: data.title,
-          description: data.description || null,
-          timestamp_seconds: timestampSeconds,
-          due_date: data.due_date || null,
-          source_type: 'manual',
-          status: 'pending',
-        })
-        .select()
-        .single();
-
-      if (taskError) throw taskError;
-
-      // 3. Create manual item for tracking
+      // 2. Create manual item first (used for tracking and linking to task)
       const { data: manualItem, error: itemError } = await supabase
         .from('manual_items')
         .insert({
@@ -238,13 +223,45 @@ export function useCreateManualTask() {
 
       if (itemError) throw itemError;
 
-      console.log('Created task:', { 
-        taskId: task.id, 
-        videoId: data.video_id, 
-        userId: user!.id 
-      });
+      // 3. Create task record - video_id is required in schema, need to handle this
+      // For standalone tasks without video, we need to use a dummy/default approach
+      // Check if video_id is nullable in schema - if not, this needs DB migration
+      if (data.video_id) {
+        const { data: task, error: taskError } = await supabase
+          .from('tasks')
+          .insert({
+            user_id: user!.id,
+            highlight_id: highlightId,
+            video_id: data.video_id,
+            title: data.title,
+            description: data.description || null,
+            timestamp_seconds: timestampSeconds,
+            due_date: data.due_date || null,
+            source_type: 'manual',
+            status: 'pending',
+            manual_item_id: manualItem.id,
+          })
+          .select()
+          .single();
 
-      return { task, highlight, manualItem };
+        if (taskError) throw taskError;
+
+        console.log('Created task with video:', { 
+          taskId: task.id, 
+          videoId: data.video_id, 
+          userId: user!.id 
+        });
+
+        return { task, highlight: { id: highlightId }, manualItem };
+      } else {
+        // Task without video - just use manual item
+        console.log('Created standalone task:', { 
+          manualItemId: manualItem.id, 
+          userId: user!.id 
+        });
+
+        return { task: null, highlight: null, manualItem };
+      }
     },
     onSuccess: (_, variables) => {
       // Invalidate tasks for this specific video so it appears immediately

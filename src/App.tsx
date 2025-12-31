@@ -7,6 +7,7 @@ import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LibraryPage from "./pages/LibraryPage";
+import TodoPage from "./pages/TodoPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import AddTranscriptPage from "./pages/AddTranscriptPage";
 import NotFound from "./pages/NotFound";
@@ -48,6 +49,7 @@ function AppRoutes() {
       <Route path="/" element={<Navigate to="/home" replace />} />
       <Route path="/home" element={<HomePage onLogout={signOut} />} />
       <Route path="/library" element={<LibraryPage onLogout={signOut} />} />
+      <Route path="/todo" element={<TodoPage onLogout={signOut} />} />
       <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
       <Route path="/video/:id/add-transcript" element={<AddTranscriptPage onLogout={signOut} />} />
       <Route path="*" element={<NotFound />} />
