@@ -23,6 +23,7 @@ interface AddTodoSheetProps {
   getCurrentTime?: () => number | null;
   prefillTitle?: string;
   prefillTimestamp?: number;
+  prefillEndTimestamp?: number;
 }
 
 export function AddTodoSheet({
@@ -33,11 +34,13 @@ export function AddTodoSheet({
   getCurrentTime,
   prefillTitle,
   prefillTimestamp,
+  prefillEndTimestamp,
 }: AddTodoSheetProps) {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [timestampSeconds, setTimestampSeconds] = useState<number | null>(null);
+  const [endTimestampSeconds, setEndTimestampSeconds] = useState<number | null>(null);
   const [checklistItems, setChecklistItems] = useState<string[]>([]);
   const [newChecklistItem, setNewChecklistItem] = useState('');
 
@@ -50,10 +53,11 @@ export function AddTodoSheet({
       setDetails('');
       setDueDate('');
       setTimestampSeconds(prefillTimestamp ?? null);
+      setEndTimestampSeconds(prefillEndTimestamp ?? null);
       setChecklistItems([]);
       setNewChecklistItem('');
     }
-  }, [open, prefillTitle, prefillTimestamp]);
+  }, [open, prefillTitle, prefillTimestamp, prefillEndTimestamp]);
 
   const handleUseCurrentTime = () => {
     if (getCurrentTime) {
@@ -68,6 +72,14 @@ export function AddTodoSheet({
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimestampRange = (): string => {
+    if (timestampSeconds === null) return '';
+    if (endTimestampSeconds !== null && endTimestampSeconds !== timestampSeconds) {
+      return `${formatTimestamp(timestampSeconds)} - ${formatTimestamp(endTimestampSeconds)}`;
+    }
+    return formatTimestamp(timestampSeconds);
   };
 
   const handleAddChecklistItem = () => {
@@ -110,6 +122,7 @@ export function AddTodoSheet({
   };
 
   const canSave = title.trim().length > 0;
+  const timestampDisplay = formatTimestampRange();
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -163,6 +176,18 @@ export function AddTodoSheet({
               </div>
             )}
 
+            {/* Timestamp Range Display */}
+            {timestampDisplay && (
+              <div className="space-y-2">
+                <Label>Timestamp</Label>
+                <div className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded-lg">
+                  <Badge variant="outline" className="shrink-0 font-mono">
+                    {timestampDisplay}
+                  </Badge>
+                </div>
+              </div>
+            )}
+
             {/* Due Date */}
             <div className="space-y-2">
               <Label htmlFor="task-due-date">Due Date (optional)</Label>
@@ -175,37 +200,36 @@ export function AddTodoSheet({
               />
             </div>
 
-            {/* Timestamp */}
-            <div className="space-y-2">
-              <Label htmlFor="task-timestamp">Timestamp (optional)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="task-timestamp"
-                  type="number"
-                  placeholder="Seconds"
-                  value={timestampSeconds ?? ''}
-                  onChange={(e) =>
-                    setTimestampSeconds(e.target.value ? Number(e.target.value) : null)
-                  }
-                  className="flex-1"
-                />
-                {getCurrentTime && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleUseCurrentTime}
-                    className="shrink-0"
-                  >
-                    <Play className="h-4 w-4 mr-1" />
-                    Current Time
-                  </Button>
-                )}
+            {/* Timestamp Input (only show if no prefill) */}
+            {!prefillTimestamp && (
+              <div className="space-y-2">
+                <Label htmlFor="task-timestamp">Timestamp (optional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="task-timestamp"
+                    type="number"
+                    placeholder="Seconds"
+                    value={timestampSeconds ?? ''}
+                    onChange={(e) =>
+                      setTimestampSeconds(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="flex-1"
+                  />
+                  {getCurrentTime && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseCurrentTime}
+                      className="shrink-0"
+                    >
+                      <Play className="h-4 w-4 mr-1" />
+                      Current Time
+                    </Button>
+                  )}
+                </div>
               </div>
-              {timestampSeconds !== null && (
-                <p className="text-xs text-muted-foreground">{formatTimestamp(timestampSeconds)}</p>
-              )}
-            </div>
+            )}
 
             {/* Checklist */}
             <div className="space-y-2">

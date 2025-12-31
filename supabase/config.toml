@@ -5,3 +5,6 @@ verify_jwt = false
 
 [functions.ai-process]
 verify_jwt = false
+
+[functions.generate-key-points]
+verify_jwt = false

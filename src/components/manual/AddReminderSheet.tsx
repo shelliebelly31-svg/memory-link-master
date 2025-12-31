@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Brain, Play, Loader2, X, Plus } from 'lucide-react';
+import { Brain, Play, Loader2, X, Plus, Sparkles } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -16,6 +16,8 @@ import { Badge } from '@/components/ui/badge';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { Checkbox } from '@/components/ui/checkbox';
 import { useCreateManualReminder, type RepeatType } from '@/hooks/useManualItems';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface AddReminderSheetProps {
   open: boolean;
@@ -25,6 +27,7 @@ interface AddReminderSheetProps {
   getCurrentTime?: () => number | null;
   prefillTitle?: string;
   prefillTimestamp?: number;
+  prefillEndTimestamp?: number;
 }
 
 const WEEKDAYS = [
@@ -45,15 +48,18 @@ export function AddReminderSheet({
   getCurrentTime,
   prefillTitle,
   prefillTimestamp,
+  prefillEndTimestamp,
 }: AddReminderSheetProps) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
   const [timestampSeconds, setTimestampSeconds] = useState<number | null>(null);
+  const [endTimestampSeconds, setEndTimestampSeconds] = useState<number | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
   const [scheduleTime, setScheduleTime] = useState('09:00');
   const [repeatType, setRepeatType] = useState<RepeatType>('one_time');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [multipleDates, setMultipleDates] = useState<{ date: string; time: string }[]>([]);
+  const [isGeneratingKeyPoints, setIsGeneratingKeyPoints] = useState(false);
 
   const createReminder = useCreateManualReminder();
 
@@ -63,13 +69,14 @@ export function AddReminderSheet({
       setTitle(prefillTitle || '');
       setNotes('');
       setTimestampSeconds(prefillTimestamp ?? null);
+      setEndTimestampSeconds(prefillEndTimestamp ?? null);
       setScheduleDate('');
       setScheduleTime('09:00');
       setRepeatType('one_time');
       setSelectedDays([]);
       setMultipleDates([]);
     }
-  }, [open, prefillTitle, prefillTimestamp]);
+  }, [open, prefillTitle, prefillTimestamp, prefillEndTimestamp]);
 
   const handleUseCurrentTime = () => {
     if (getCurrentTime) {
@@ -84,6 +91,14 @@ export function AddReminderSheet({
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const formatTimestampRange = (): string => {
+    if (timestampSeconds === null) return '';
+    if (endTimestampSeconds !== null && endTimestampSeconds !== timestampSeconds) {
+      return `${formatTimestamp(timestampSeconds)} - ${formatTimestamp(endTimestampSeconds)}`;
+    }
+    return formatTimestamp(timestampSeconds);
   };
 
   const handleDayToggle = (day: number) => {
@@ -107,6 +122,44 @@ export function AddReminderSheet({
     setMultipleDates((prev) =>
       prev.map((d, i) => (i === index ? { ...d, [field]: value } : d))
     );
+  };
+
+  const handleGenerateKeyPoints = async () => {
+    if (!title.trim()) {
+      toast.error('Please enter a title first');
+      return;
+    }
+
+    setIsGeneratingKeyPoints(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-key-points', {
+        body: {
+          title: title.trim(),
+          notes: notes.trim() || undefined,
+          video_id: videoId,
+        },
+      });
+
+      if (error) throw error;
+
+      const keyPoints = data.key_points || [];
+      if (keyPoints.length > 0) {
+        const bulletPoints = keyPoints.map((p: string) => `• ${p}`).join('\n');
+        
+        if (notes.trim()) {
+          // Append below existing notes with divider
+          setNotes(notes.trim() + '\n\n---\nKey points:\n' + bulletPoints);
+        } else {
+          setNotes('Key points:\n' + bulletPoints);
+        }
+        toast.success(`Generated ${keyPoints.length} key points`);
+      }
+    } catch (error) {
+      console.error('Error generating key points:', error);
+      toast.error('Failed to generate key points');
+    } finally {
+      setIsGeneratingKeyPoints(false);
+    }
   };
 
   const handleSave = () => {
@@ -140,16 +193,33 @@ export function AddReminderSheet({
   };
 
   const canSave = title.trim().length > 0;
+  const timestampDisplay = formatTimestampRange();
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
       <DrawerContent className="max-h-[85vh] flex flex-col">
         {/* Fixed Header */}
         <DrawerHeader className="border-b border-border shrink-0">
-          <DrawerTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-remember" />
-            Add Reminder
-          </DrawerTitle>
+          <div className="flex items-center justify-between">
+            <DrawerTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-remember" />
+              Add Reminder
+            </DrawerTitle>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleGenerateKeyPoints}
+              disabled={isGeneratingKeyPoints || !title.trim()}
+              className="gap-1.5"
+            >
+              {isGeneratingKeyPoints ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              Generate key points
+            </Button>
+          </div>
           <DrawerDescription>Create a custom reminder to remember later</DrawerDescription>
         </DrawerHeader>
 
@@ -175,7 +245,7 @@ export function AddReminderSheet({
                 placeholder="Add any additional details..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={3}
+                rows={4}
               />
             </div>
 
@@ -192,37 +262,48 @@ export function AddReminderSheet({
               </div>
             )}
 
-            {/* Timestamp */}
-            <div className="space-y-2">
-              <Label htmlFor="reminder-timestamp">Timestamp (optional)</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="reminder-timestamp"
-                  type="number"
-                  placeholder="Seconds"
-                  value={timestampSeconds ?? ''}
-                  onChange={(e) =>
-                    setTimestampSeconds(e.target.value ? Number(e.target.value) : null)
-                  }
-                  className="flex-1"
-                />
-                {getCurrentTime && (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={handleUseCurrentTime}
-                    className="shrink-0"
-                  >
-                    <Play className="h-4 w-4 mr-1" />
-                    Current Time
-                  </Button>
-                )}
+            {/* Timestamp Range Display */}
+            {timestampDisplay && (
+              <div className="space-y-2">
+                <Label>Timestamp</Label>
+                <div className="flex items-center gap-2 text-sm bg-muted/50 p-2 rounded-lg">
+                  <Badge variant="outline" className="shrink-0 font-mono">
+                    {timestampDisplay}
+                  </Badge>
+                </div>
               </div>
-              {timestampSeconds !== null && (
-                <p className="text-xs text-muted-foreground">{formatTimestamp(timestampSeconds)}</p>
-              )}
-            </div>
+            )}
+
+            {/* Timestamp Input (only show if no prefill) */}
+            {!prefillTimestamp && (
+              <div className="space-y-2">
+                <Label htmlFor="reminder-timestamp">Timestamp (optional)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="reminder-timestamp"
+                    type="number"
+                    placeholder="Seconds"
+                    value={timestampSeconds ?? ''}
+                    onChange={(e) =>
+                      setTimestampSeconds(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="flex-1"
+                  />
+                  {getCurrentTime && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseCurrentTime}
+                      className="shrink-0"
+                    >
+                      <Play className="h-4 w-4 mr-1" />
+                      Current Time
+                    </Button>
+                  )}
+                </div>
+              </div>
+            )}
 
             {/* Schedule */}
             <div className="space-y-2">
