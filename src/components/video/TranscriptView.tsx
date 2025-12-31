@@ -250,11 +250,15 @@ export function TranscriptView({
         )}
       </div>
 
-      {/* Transcript Segments */}
-      <div className={cn("space-y-2", highlightMode && "select-text cursor-text")}>
-        {segments.map((segment) => {
+      {/* Transcript Segments - Tight list layout */}
+      <div className={cn(highlightMode && "select-text cursor-text")}>
+        {segments.map((segment, index) => {
           const segmentHighlights = getSegmentHighlights(segment);
           const hasHighlights = segmentHighlights.length > 0;
+          
+          // Check if there's a gap (paragraph break) - more than 2 seconds between segments
+          const prevSegment = index > 0 ? segments[index - 1] : null;
+          const hasGap = prevSegment && (segment.start_seconds - prevSegment.end_seconds) > 2;
           
           return (
             <div
@@ -263,21 +267,18 @@ export function TranscriptView({
               data-start={segment.start_seconds}
               data-end={segment.end_seconds}
               className={cn(
-                "p-4 rounded-lg transition-all duration-200 border",
-                highlightMode 
-                  ? "border-transparent hover:bg-muted/30 cursor-text" 
-                  : "border-transparent",
-                hasHighlights && "bg-muted/20"
+                "flex gap-3 py-1 px-2 transition-colors",
+                highlightMode && "hover:bg-muted/30 cursor-text",
+                hasHighlights && "bg-muted/20",
+                hasGap && "mt-3 pt-2 border-t border-border/30"
               )}
             >
-              <div className="flex gap-3">
-                <span className="text-xs font-mono text-muted-foreground shrink-0 mt-1 select-none">
-                  {formatTimestamp(segment.start_seconds)}
-                </span>
-                <p className="text-sm leading-relaxed flex-1">
-                  {renderHighlightedText(segment)}
-                </p>
-              </div>
+              <span className="text-[11px] font-mono text-muted-foreground w-12 shrink-0 select-none tabular-nums">
+                {formatTimestamp(segment.start_seconds)}
+              </span>
+              <span className="text-sm leading-snug flex-1">
+                {renderHighlightedText(segment)}
+              </span>
             </div>
           );
         })}
