@@ -45,6 +45,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [addTodoOpen, setAddTodoOpen] = useState(false);
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
   const [prefillTimestamp, setPrefillTimestamp] = useState<number | undefined>();
+  const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -76,16 +77,18 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   );
 
   // Handler for opening reminder sheet from transcript selection
-  const handleOpenReminderFromSelection = useCallback((text: string, timestamp: number) => {
+  const handleOpenReminderFromSelection = useCallback((text: string, timestamp: number, endTimestamp?: number) => {
     setPrefillTitle(text);
     setPrefillTimestamp(timestamp);
+    setPrefillEndTimestamp(endTimestamp);
     setAddReminderOpen(true);
   }, []);
 
   // Handler for opening todo sheet from transcript selection
-  const handleOpenTodoFromSelection = useCallback((text: string, timestamp: number) => {
+  const handleOpenTodoFromSelection = useCallback((text: string, timestamp: number, endTimestamp?: number) => {
     setPrefillTitle(text);
     setPrefillTimestamp(timestamp);
+    setPrefillEndTimestamp(endTimestamp);
     setAddTodoOpen(true);
   }, []);
 
@@ -93,12 +96,14 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const handleOpenReminderManual = useCallback(() => {
     setPrefillTitle(undefined);
     setPrefillTimestamp(undefined);
+    setPrefillEndTimestamp(undefined);
     setAddReminderOpen(true);
   }, []);
 
   const handleOpenTodoManual = useCallback(() => {
     setPrefillTitle(undefined);
     setPrefillTimestamp(undefined);
+    setPrefillEndTimestamp(undefined);
     setAddTodoOpen(true);
   }, []);
 
@@ -409,6 +414,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         getCurrentTime={playerTimeRef.current || undefined}
         prefillTitle={prefillTitle}
         prefillTimestamp={prefillTimestamp}
+        prefillEndTimestamp={prefillEndTimestamp}
       />
       <AddTodoSheet
         open={addTodoOpen}
@@ -418,6 +424,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         getCurrentTime={playerTimeRef.current || undefined}
         prefillTitle={prefillTitle}
         prefillTimestamp={prefillTimestamp}
+        prefillEndTimestamp={prefillEndTimestamp}
       />
     </PageLayout>
   );

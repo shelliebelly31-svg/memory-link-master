@@ -1,11 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, MousePointer } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, MousePointer, Plus } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
-import { AISuggestionsPanel } from './AISuggestionsPanel';
+import { QuickAddSheet } from './QuickAddSheet';
 
 interface TranscriptViewProps {
   segments: TranscriptSegment[];
@@ -14,8 +14,8 @@ interface TranscriptViewProps {
   aiSuggestionsGenerated: boolean;
   onAddHighlight: (type: HighlightType, text: string, startSeconds: number, endSeconds: number) => void;
   onHighlightsUpdated: () => void;
-  onOpenReminderSheet: (text: string, timestamp: number) => void;
-  onOpenTodoSheet: (text: string, timestamp: number) => void;
+  onOpenReminderSheet: (text: string, timestamp: number, endTimestamp?: number) => void;
+  onOpenTodoSheet: (text: string, timestamp: number, endTimestamp?: number) => void;
   getCurrentTime?: () => number | null;
 }
 
@@ -25,11 +25,17 @@ interface SelectionState {
   endSeconds: number;
 }
 
+interface QuickAddState {
+  open: boolean;
+  segmentText: string;
+  segmentStart: number;
+  segmentEnd: number;
+}
+
 export function TranscriptView({ 
   segments, 
   highlights, 
   videoId, 
-  aiSuggestionsGenerated, 
   onAddHighlight, 
   onHighlightsUpdated,
   onOpenReminderSheet,
@@ -38,6 +44,12 @@ export function TranscriptView({
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
+  const [quickAdd, setQuickAdd] = useState<QuickAddState>({
+    open: false,
+    segmentText: '',
+    segmentStart: 0,
+    segmentEnd: 0,
+  });
   const containerRef = useRef<HTMLDivElement>(null);
 
   // Get all highlights that overlap with a segment
@@ -125,7 +137,7 @@ export function TranscriptView({
   const handleReminderTap = () => {
     if (selection && highlightMode) {
       // With selection: open sheet prefilled
-      onOpenReminderSheet(selection.text, selection.startSeconds);
+      onOpenReminderSheet(selection.text, selection.startSeconds, selection.endSeconds);
       clearSelection();
     } else {
       // No selection: open empty sheet (manual entry)
@@ -138,13 +150,33 @@ export function TranscriptView({
   const handleTodoTap = () => {
     if (selection && highlightMode) {
       // With selection: open sheet prefilled
-      onOpenTodoSheet(selection.text, selection.startSeconds);
+      onOpenTodoSheet(selection.text, selection.startSeconds, selection.endSeconds);
       clearSelection();
     } else {
       // No selection: open empty sheet (manual entry)
       const timestamp = getCurrentTime?.() ?? 0;
       onOpenTodoSheet('', timestamp);
     }
+  };
+
+  // Handle plus button click on segment
+  const handlePlusClick = (segment: TranscriptSegment, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setQuickAdd({
+      open: true,
+      segmentText: segment.text,
+      segmentStart: segment.start_seconds,
+      segmentEnd: segment.end_seconds,
+    });
+  };
+
+  // Handle quick add selections
+  const handleQuickAddReminder = () => {
+    onOpenReminderSheet(quickAdd.segmentText, quickAdd.segmentStart, quickAdd.segmentEnd);
+  };
+
+  const handleQuickAddTodo = () => {
+    onOpenTodoSheet(quickAdd.segmentText, quickAdd.segmentStart, quickAdd.segmentEnd);
   };
 
   // Render text with existing highlights marked
@@ -164,13 +196,10 @@ export function TranscriptView({
         {highlightTypes.length > 0 && (
           <span className="ml-2 inline-flex gap-1">
             {highlightTypes.includes('remember') && (
-              <span className="inline-block w-2 h-2 rounded-full bg-highlight-remember" title="Remember highlight" />
+              <span className="inline-block w-2 h-2 rounded-full bg-remember" title="Remember highlight" />
             )}
             {highlightTypes.includes('todo') && (
-              <span className="inline-block w-2 h-2 rounded-full bg-highlight-todo" title="To Do highlight" />
-            )}
-            {highlightTypes.includes('ai_suggested') && (
-              <span className="inline-block w-2 h-2 rounded-full bg-highlight-ai" title="AI suggested highlight" />
+              <span className="inline-block w-2 h-2 rounded-full bg-todo" title="To Do highlight" />
             )}
           </span>
         )}
@@ -204,7 +233,7 @@ export function TranscriptView({
         </div>
         <p className="text-xs text-muted-foreground mt-1">
           {highlightMode 
-            ? 'Select text, then choose Reminder or To Do' 
+            ? 'Select text or tap + to save' 
             : 'Normal scroll and copy behavior.'}
         </p>
 
@@ -250,7 +279,7 @@ export function TranscriptView({
         )}
       </div>
 
-      {/* Transcript Segments - Tight list layout */}
+      {/* Transcript Segments - Tight list layout with plus buttons */}
       <div className={cn(highlightMode && "select-text cursor-text")}>
         {segments.map((segment, index) => {
           const segmentHighlights = getSegmentHighlights(segment);
@@ -267,13 +296,27 @@ export function TranscriptView({
               data-start={segment.start_seconds}
               data-end={segment.end_seconds}
               className={cn(
-                "flex gap-3 py-1 px-2 transition-colors",
+                "group flex gap-2 py-1 px-2 transition-colors relative",
                 highlightMode && "hover:bg-muted/30 cursor-text",
                 hasHighlights && "bg-muted/20",
                 hasGap && "mt-3 pt-2 border-t border-border/30"
               )}
             >
-              <span className="text-[11px] font-mono text-muted-foreground w-12 shrink-0 select-none tabular-nums">
+              {/* Plus button for quick add */}
+              <button
+                onClick={(e) => handlePlusClick(segment, e)}
+                className={cn(
+                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+                  "border border-border/50 bg-background text-muted-foreground",
+                  "hover:border-primary hover:text-primary hover:bg-primary/10",
+                  "transition-colors opacity-0 group-hover:opacity-100",
+                  "focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
+                )}
+                aria-label="Quick add this segment"
+              >
+                <Plus className="h-3 w-3" />
+              </button>
+              <span className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums">
                 {formatTimestamp(segment.start_seconds)}
               </span>
               <span className="text-sm leading-snug flex-1">
@@ -290,13 +333,15 @@ export function TranscriptView({
         </div>
       )}
 
-      {/* AI Suggestions Panel - Separate from selection */}
-      <AISuggestionsPanel
-        videoId={videoId}
-        aiSuggestionsGenerated={aiSuggestionsGenerated}
-        highlights={highlights}
-        onConvert={onAddHighlight}
-        onSuggestionsUpdated={onHighlightsUpdated}
+      {/* Quick Add Sheet */}
+      <QuickAddSheet
+        open={quickAdd.open}
+        onOpenChange={(open) => setQuickAdd(prev => ({ ...prev, open }))}
+        segmentText={quickAdd.segmentText}
+        segmentStart={quickAdd.segmentStart}
+        segmentEnd={quickAdd.segmentEnd}
+        onSelectReminder={handleQuickAddReminder}
+        onSelectTodo={handleQuickAddTodo}
       />
     </div>
   );
