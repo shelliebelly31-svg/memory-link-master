@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Brain, Library, LogOut } from 'lucide-react';
+import { Brain, Library, LogOut, CheckSquare } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -42,6 +42,19 @@ export function MobileNav({ isAuthenticated = true, onLogout }: MobileNavProps) 
           >
             <Library className="h-5 w-5" />
             <span className="text-[10px] font-medium">Library</span>
+          </Button>
+        </Link>
+        <Link to="/todo">
+          <Button 
+            variant="ghost" 
+            size="icon-lg" 
+            className={cn(
+              "flex flex-col gap-1 h-auto py-2",
+              isActive('/todo') && "text-todo"
+            )}
+          >
+            <CheckSquare className="h-5 w-5" />
+            <span className="text-[10px] font-medium">To Do</span>
           </Button>
         </Link>
         <Button 
