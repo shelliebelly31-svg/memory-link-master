@@ -17,7 +17,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { EditTaskSheet } from './EditTaskSheet';
-import { useUpdateTask, useDeleteTask } from '@/hooks/useItemMutations';
+import { useUpdateTask, useDeleteTask, useUpdateTaskChecklist, ChecklistItem } from '@/hooks/useItemMutations';
 
 interface TodoTabProps {
   tasks: Task[];
@@ -39,14 +39,19 @@ export function TodoTab({
 
   const updateMutation = useUpdateTask();
   const deleteMutation = useDeleteTask();
+  const checklistMutation = useUpdateTaskChecklist();
 
   const pendingTasks = tasks.filter(t => t.status !== 'completed');
   const completedTasks = tasks.filter(t => t.status === 'completed');
 
-  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null }) => {
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[] }) => {
     updateMutation.mutate({ id, ...data }, {
       onSuccess: () => setEditTask(null),
     });
+  };
+
+  const handleChecklistToggle = (id: string, checklistItems: ChecklistItem[]) => {
+    checklistMutation.mutate({ id, checklist_items: checklistItems });
   };
 
   const handleDelete = () => {
@@ -202,6 +207,7 @@ export function TodoTab({
         onOpenChange={(open) => !open && setEditTask(null)}
         task={editTask}
         onSave={handleSaveEdit}
+        onChecklistToggle={handleChecklistToggle}
         isSaving={updateMutation.isPending}
       />
 

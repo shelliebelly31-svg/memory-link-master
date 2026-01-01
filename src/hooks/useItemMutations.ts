@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
 import { useToast } from '@/hooks/use-toast';
+import type { Json } from '@/integrations/supabase/types';
 
 // Update a remember item
 export function useUpdateRememberItem() {
@@ -78,6 +79,15 @@ export function useDeleteRememberItem() {
   });
 }
 
+// Checklist item type
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // Update a task
 export function useUpdateTask() {
   const queryClient = useQueryClient();
@@ -89,15 +99,22 @@ export function useUpdateTask() {
       title, 
       description,
       due_date,
+      checklist_items,
     }: { 
       id: string; 
       title: string; 
       description: string | null;
       due_date: string | null;
+      checklist_items?: ChecklistItem[];
     }) => {
+      const updateData: Record<string, unknown> = { title, description, due_date };
+      if (checklist_items !== undefined) {
+        updateData.checklist_items = checklist_items as unknown as Json;
+      }
+      
       const { error } = await supabase
         .from('tasks')
-        .update({ title, description, due_date })
+        .update(updateData as { title: string; description: string | null; due_date: string | null; checklist_items?: Json })
         .eq('id', id);
 
       if (error) throw error;
@@ -109,6 +126,32 @@ export function useUpdateTask() {
     },
     onError: (error: Error) => {
       toast({ title: 'Error', description: error.message, variant: 'destructive' });
+    },
+  });
+}
+
+// Update just checklist items (for immediate toggle saves)
+export function useUpdateTaskChecklist() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ 
+      id, 
+      checklist_items,
+    }: { 
+      id: string; 
+      checklist_items: ChecklistItem[];
+    }) => {
+      const { error } = await supabase
+        .from('tasks')
+        .update({ checklist_items: checklist_items as unknown as Json })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['tasks'] });
+      queryClient.invalidateQueries({ queryKey: ['all_tasks'] });
     },
   });
 }
