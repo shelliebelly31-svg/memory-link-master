@@ -32,6 +32,14 @@ export interface CombinedReminder {
   remember_item_id?: string; // For highlight-based reminders
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface TaskWithVideo {
   id: string;
   highlight_id: string;
@@ -47,6 +55,7 @@ export interface TaskWithVideo {
   video_title: string;
   video_youtube_id: string;
   source_type?: string;
+  checklist_items?: ChecklistItem[] | null;
 }
 
 export interface QuizItemWithVideo {
@@ -236,6 +245,7 @@ export function useAllTasks() {
           ...task,
           video_title: video?.title || 'Unknown Video',
           video_youtube_id: video?.youtube_id || '',
+          checklist_items: task.checklist_items as unknown as ChecklistItem[] | null,
         } as TaskWithVideo;
       });
     },

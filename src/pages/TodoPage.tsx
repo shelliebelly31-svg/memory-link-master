@@ -21,7 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { TaskWithVideo, useAllTasks, useUpdateTaskStatusGlobal } from '@/hooks/useHomeData';
-import { useUpdateTask, useDeleteTask } from '@/hooks/useItemMutations';
+import { useUpdateTask, useDeleteTask, useUpdateTaskChecklist, ChecklistItem } from '@/hooks/useItemMutations';
 import { EditTaskSheet } from '@/components/video/EditTaskSheet';
 import { TextMeTaskDialog } from '@/components/todo/TextMeTaskDialog';
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
@@ -59,6 +59,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
   const updateStatus = useUpdateTaskStatusGlobal();
   const updateMutation = useUpdateTask();
   const deleteMutation = useDeleteTask();
+  const checklistMutation = useUpdateTaskChecklist();
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -102,10 +103,14 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
     navigate(`/video/${task.video_id}?t=${task.timestamp_seconds}`);
   };
 
-  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null }) => {
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[] }) => {
     updateMutation.mutate({ id, ...data }, {
       onSuccess: () => setEditTask(null),
     });
+  };
+
+  const handleChecklistToggle = (id: string, checklistItems: ChecklistItem[]) => {
+    checklistMutation.mutate({ id, checklist_items: checklistItems });
   };
 
   const handleDelete = () => {
@@ -307,6 +312,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
         onOpenChange={(o) => !o && setEditTask(null)}
         task={editTask}
         onSave={handleSaveEdit}
+        onChecklistToggle={handleChecklistToggle}
         isSaving={updateMutation.isPending}
       />
 

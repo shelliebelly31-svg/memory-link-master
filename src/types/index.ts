@@ -48,6 +48,14 @@ export interface RememberItem {
   created_at: string;
 }
 
+export interface ChecklistItem {
+  id: string;
+  text: string;
+  completed: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface Task {
   id: string;
   highlight_id: string;
@@ -61,6 +69,7 @@ export interface Task {
   status: 'pending' | 'in_progress' | 'completed';
   order_index: number;
   created_at: string;
+  checklist_items?: ChecklistItem[] | null;
 }
 
 export interface QuizItem {

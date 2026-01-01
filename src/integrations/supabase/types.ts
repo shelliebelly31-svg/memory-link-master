@@ -320,6 +320,7 @@ export type Database = {
       }
       tasks: {
         Row: {
+          checklist_items: Json | null
           created_at: string
           description: string | null
           due_date: string | null
@@ -335,6 +336,7 @@ export type Database = {
           video_id: string
         }
         Insert: {
+          checklist_items?: Json | null
           created_at?: string
           description?: string | null
           due_date?: string | null
@@ -350,6 +352,7 @@ export type Database = {
           video_id: string
         }
         Update: {
+          checklist_items?: Json | null
           created_at?: string
           description?: string | null
           due_date?: string | null
