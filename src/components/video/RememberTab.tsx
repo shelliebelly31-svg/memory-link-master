@@ -30,6 +30,7 @@ interface RememberTabProps {
   onConvertToRemember: (highlightId: string) => void;
   onSetSchedule: (itemId: string, schedule: 'daily' | 'weekly' | 'monthly' | null) => void;
   onJumpToTimestamp: (seconds: number) => void;
+  videoTitle?: string;
 }
 
 export function RememberTab({
@@ -38,6 +39,7 @@ export function RememberTab({
   onConvertToRemember,
   onSetSchedule,
   onJumpToTimestamp,
+  videoTitle,
 }: RememberTabProps) {
   const [editItem, setEditItem] = useState<RememberItem | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
@@ -184,6 +186,7 @@ export function RememberTab({
         item={editItem}
         onSave={handleSaveEdit}
         isSaving={updateMutation.isPending}
+        videoTitle={videoTitle}
       />
 
       {/* Delete Confirmation */}

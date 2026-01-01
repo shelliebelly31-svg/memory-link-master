@@ -374,6 +374,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onConvertToRemember={handleConvertToRemember}
                   onSetSchedule={handleSetSchedule}
                   onJumpToTimestamp={handleJumpToTimestamp}
+                  videoTitle={video.title}
                 />
               </TabsContent>
               

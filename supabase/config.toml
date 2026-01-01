@@ -1,5 +1,8 @@
 project_id = "trmcgpjsweacadqoadlh"
 
+[functions.generate-memory-suggestions]
+verify_jwt = false
+
 [functions.add-video]
 verify_jwt = false
 
