@@ -1,17 +1,18 @@
-import { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, MessageSquare, Calendar, Loader2, Plus } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAllRememberItems, useAllTasks, useAllQuizItems, useAllRemindersCombined, RememberItemWithVideo, TaskWithVideo, CombinedReminder } from '@/hooks/useHomeData';
+import { useAllRememberItems, useAllTasks, useAllQuizItems, useAllRemindersCombined, RememberItemWithVideo, TaskWithVideo, CombinedReminder, useSoftDeleteReminder, useUndoDeleteReminder } from '@/hooks/useHomeData';
 import { ReminderCard } from '@/components/home/ReminderCard';
 import { CombinedTasksSheet } from '@/components/home/CombinedTasksSheet';
 import { DailyQuizSheet } from '@/components/home/DailyQuizSheet';
 import { TextMeDialog } from '@/components/home/TextMeDialog';
 import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
+import { toast } from 'sonner';
 
 interface HomePageProps {
   onLogout: () => void;
@@ -49,10 +50,16 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const [selectedReminder, setSelectedReminder] = useState<CombinedReminder | null>(null);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
+  
+  // Delete undo state
+  const [pendingDeletes, setPendingDeletes] = useState<Map<string, { reminder: CombinedReminder; index: number; timeoutId: NodeJS.Timeout }>>(new Map());
 
   const { data: rememberItems = [], isLoading: loadingReminders } = useAllRemindersCombined();
   const { data: allTasks = [], isLoading: loadingTasks } = useAllTasks();
   const { data: quizItems = [], isLoading: loadingQuiz } = useAllQuizItems();
+  
+  const softDeleteMutation = useSoftDeleteReminder();
+  const undoDeleteMutation = useUndoDeleteReminder();
 
   // Shuffle reminders for display
   const shuffledReminders = useMemo(() => {
@@ -111,6 +118,67 @@ export default function HomePage({ onLogout }: HomePageProps) {
     setSelectedReminder(reminder);
     setTextMeOpen(true);
   };
+
+  const handleDeleteReminder = useCallback((reminder: CombinedReminder, index: number) => {
+    // Find current index in shuffled list for restore position
+    const currentIndex = shuffledReminders.findIndex(r => r.id === reminder.id);
+    
+    // Perform soft delete
+    softDeleteMutation.mutate(
+      { id: reminder.id, isManual: reminder.is_manual },
+      {
+        onSuccess: () => {
+          // Store for undo
+          const timeoutId = setTimeout(() => {
+            // Remove from pending after 30 seconds
+            setPendingDeletes(prev => {
+              const next = new Map(prev);
+              next.delete(reminder.id);
+              return next;
+            });
+          }, 30000);
+          
+          setPendingDeletes(prev => {
+            const next = new Map(prev);
+            next.set(reminder.id, { reminder, index: currentIndex, timeoutId });
+            return next;
+          });
+          
+          // Show toast with undo
+          toast('Reminder deleted', {
+            action: {
+              label: 'Undo',
+              onClick: () => handleUndoDelete(reminder.id, reminder.is_manual),
+            },
+            duration: 30000,
+          });
+        },
+      }
+    );
+  }, [shuffledReminders, softDeleteMutation]);
+
+  const handleUndoDelete = useCallback((id: string, isManual: boolean) => {
+    // Clear timeout
+    const pending = pendingDeletes.get(id);
+    if (pending) {
+      clearTimeout(pending.timeoutId);
+      setPendingDeletes(prev => {
+        const next = new Map(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+    
+    // Undo the delete
+    undoDeleteMutation.mutate(
+      { id, isManual },
+      {
+        onSuccess: () => {
+          toast.success('Reminder restored');
+        },
+      }
+    );
+  }, [pendingDeletes, undoDeleteMutation]);
 
   const handleStartDailyQuiz = () => {
     setSelectedVideos([]);
@@ -186,6 +254,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
                       index={index}
                       onOpenVideo={() => handleOpenVideo(reminder.video_id, reminder.timestamp_seconds)}
                       onTextMe={() => handleTextMe(reminder)}
+                      onDelete={() => handleDeleteReminder(reminder, index)}
                     />
                   ))}
 

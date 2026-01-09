@@ -1,4 +1,4 @@
-import { Play, MessageSquare, Calendar, ExternalLink } from 'lucide-react';
+import { Play, MessageSquare, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ interface ReminderCardProps {
   index: number;
   onOpenVideo: () => void;
   onTextMe: () => void;
+  onDelete: () => void;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -17,15 +18,28 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function ReminderCard({ reminder, index, onOpenVideo, onTextMe }: ReminderCardProps) {
+export function ReminderCard({ reminder, index, onOpenVideo, onTextMe, onDelete }: ReminderCardProps) {
   return (
     <Card 
       className="card-elevated animate-fade-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <CardContent className="p-4 space-y-3">
-        {/* Summary */}
-        <p className="font-medium leading-relaxed">{reminder.summary}</p>
+        {/* Header with delete */}
+        <div className="flex items-start justify-between gap-2">
+          <p className="font-medium leading-relaxed flex-1">{reminder.summary}</p>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
+            onClick={(e) => {
+              e.stopPropagation();
+              onDelete();
+            }}
+          >
+            <Trash2 className="h-4 w-4" />
+          </Button>
+        </div>
         
         {/* Key points */}
         {reminder.key_points.length > 0 && (
