@@ -61,8 +61,10 @@ export type Database = {
       manual_items: {
         Row: {
           created_at: string
+          deleted_at: string | null
           id: string
           notes: string | null
+          pending_delete_until: string | null
           timestamp_seconds: number | null
           title: string
           type: string
@@ -71,8 +73,10 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           notes?: string | null
+          pending_delete_until?: string | null
           timestamp_seconds?: number | null
           title: string
           type: string
@@ -81,8 +85,10 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           id?: string
           notes?: string | null
+          pending_delete_until?: string | null
           timestamp_seconds?: number | null
           title?: string
           type?: string
@@ -200,10 +206,12 @@ export type Database = {
       remember_items: {
         Row: {
           created_at: string
+          deleted_at: string | null
           highlight_id: string
           id: string
           key_points: string[]
           last_reviewed_at: string | null
+          pending_delete_until: string | null
           review_schedule: Database["public"]["Enums"]["review_schedule"] | null
           summary: string
           timestamp_seconds: number
@@ -212,10 +220,12 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          deleted_at?: string | null
           highlight_id: string
           id?: string
           key_points?: string[]
           last_reviewed_at?: string | null
+          pending_delete_until?: string | null
           review_schedule?:
             | Database["public"]["Enums"]["review_schedule"]
             | null
@@ -226,10 +236,12 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          deleted_at?: string | null
           highlight_id?: string
           id?: string
           key_points?: string[]
           last_reviewed_at?: string | null
+          pending_delete_until?: string | null
           review_schedule?:
             | Database["public"]["Enums"]["review_schedule"]
             | null

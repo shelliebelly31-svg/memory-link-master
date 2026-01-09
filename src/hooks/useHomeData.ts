@@ -90,10 +90,11 @@ export function useAllRememberItems() {
   return useQuery({
     queryKey: ['all_remember_items', user?.id],
     queryFn: async () => {
-      // Get remember items with video info
+      // Get remember items with video info - exclude deleted ones
       const { data: rememberItems, error: rememberError } = await supabase
         .from('remember_items')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (rememberError) throw rememberError;
@@ -135,19 +136,21 @@ export function useAllRemindersCombined() {
   return useQuery({
     queryKey: ['all_reminders_combined', user?.id],
     queryFn: async () => {
-      // Get remember items
+      // Get remember items - exclude deleted ones
       const { data: rememberItems, error: rememberError } = await supabase
         .from('remember_items')
         .select('*')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (rememberError) throw rememberError;
 
-      // Get manual reminder items
+      // Get manual reminder items - exclude deleted ones
       const { data: manualItems, error: manualError } = await supabase
         .from('manual_items')
         .select('*')
         .eq('type', 'reminder')
+        .is('deleted_at', null)
         .order('created_at', { ascending: false });
 
       if (manualError) throw manualError;
@@ -163,7 +166,7 @@ export function useAllRemindersCombined() {
       const { data: videos, error: videosError } = await supabase
         .from('videos')
         .select('id, title, youtube_id, status')
-        .in('id', videoIds);
+        .in('id', videoIds.length > 0 ? videoIds : ['placeholder']);
 
       if (videosError) throw videosError;
 
@@ -212,6 +215,58 @@ export function useAllRemindersCombined() {
       return [...rememberCombined, ...manualCombined];
     },
     enabled: !!user,
+  });
+}
+
+// Soft delete a reminder (with 30-second undo window)
+export function useSoftDeleteReminder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, isManual }: { id: string; isManual: boolean }) => {
+      const table = isManual ? 'manual_items' : 'remember_items';
+      const now = new Date();
+      const pendingDeleteUntil = new Date(now.getTime() + 30 * 1000);
+
+      const { error } = await supabase
+        .from(table)
+        .update({ 
+          deleted_at: now.toISOString(),
+          pending_delete_until: pendingDeleteUntil.toISOString()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all_reminders_combined'] });
+      queryClient.invalidateQueries({ queryKey: ['all_remember_items'] });
+    },
+  });
+}
+
+// Undo soft delete of a reminder
+export function useUndoDeleteReminder() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, isManual }: { id: string; isManual: boolean }) => {
+      const table = isManual ? 'manual_items' : 'remember_items';
+
+      const { error } = await supabase
+        .from(table)
+        .update({ 
+          deleted_at: null,
+          pending_delete_until: null
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['all_reminders_combined'] });
+      queryClient.invalidateQueries({ queryKey: ['all_remember_items'] });
+    },
   });
 }
 
