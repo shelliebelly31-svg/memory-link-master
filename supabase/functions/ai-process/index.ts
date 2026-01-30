@@ -395,7 +395,7 @@ Do not modify the original text, quote it exactly.`
       const aiResult = await response.json();
       const content = JSON.parse(aiResult.choices[0].message.content);
       
-      // Save quiz items to database
+      // Save quiz items to database with random shuffle seeds
       const questions = content.questions || [];
       for (const q of questions) {
         await supabase
@@ -407,6 +407,7 @@ Do not modify the original text, quote it exactly.`
             question: q.question,
             options: q.options,
             correct_answer: q.correct_answer,
+            shuffle_seed: Math.floor(Math.random() * 2147483647),
             explanation: q.explanation || '',
             topic: q.topic || 'General',
           });

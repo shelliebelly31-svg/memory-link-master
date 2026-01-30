@@ -152,6 +152,7 @@ export type Database = {
           options: string[]
           question: string
           remember_item_id: string
+          shuffle_seed: number
           times_answered: number
           times_correct: number
           topic: string | null
@@ -166,6 +167,7 @@ export type Database = {
           options: string[]
           question: string
           remember_item_id: string
+          shuffle_seed?: number
           times_answered?: number
           times_correct?: number
           topic?: string | null
@@ -180,6 +182,7 @@ export type Database = {
           options?: string[]
           question?: string
           remember_item_id?: string
+          shuffle_seed?: number
           times_answered?: number
           times_correct?: number
           topic?: string | null

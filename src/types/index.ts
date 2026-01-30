@@ -79,6 +79,7 @@ export interface QuizItem {
   question: string;
   options: string[];
   correct_answer: number;
+  shuffle_seed: number;
   explanation: string;
   times_answered: number;
   times_correct: number;
