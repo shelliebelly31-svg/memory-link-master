@@ -1,12 +1,11 @@
-import { useState, useEffect } from 'react';
-import { Brain, Loader2, X, Sparkles, Plus, Check } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { Brain, Loader2, X, Sparkles, Plus, Check, Maximize2, Minimize2 } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
   DrawerHeader,
   DrawerTitle,
   DrawerDescription,
-  DrawerFooter,
 } from '@/components/ui/drawer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -52,9 +51,12 @@ export function EditRememberItemSheet({
   const [suggestions, setSuggestions] = useState<AISuggestions | null>(null);
   const [selectedKeyPoints, setSelectedKeyPoints] = useState<Set<number>>(new Set());
   const [selectedTodos, setSelectedTodos] = useState<Set<number>>(new Set());
+  const [isFullScreen, setIsFullScreen] = useState(false);
   
   const { toast } = useToast();
   const createTaskMutation = useCreateManualTask();
+  const summaryRef = useRef<HTMLTextAreaElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (item && open) {
@@ -64,8 +66,24 @@ export function EditRememberItemSheet({
       setSuggestions(null);
       setSelectedKeyPoints(new Set());
       setSelectedTodos(new Set());
+      setIsFullScreen(false);
     }
   }, [item, open]);
+
+  // Scroll to focused element when keyboard opens
+  useEffect(() => {
+    const handleFocus = (e: FocusEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'TEXTAREA' || target.tagName === 'INPUT') {
+        setTimeout(() => {
+          target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }, 300);
+      }
+    };
+
+    document.addEventListener('focusin', handleFocus);
+    return () => document.removeEventListener('focusin', handleFocus);
+  }, []);
 
   const handleAddKeyPoint = () => {
     if (newKeyPoint.trim()) {
@@ -81,6 +99,7 @@ export function EditRememberItemSheet({
   const handleSave = () => {
     if (!item || !summary.trim()) return;
     onSave(item.id, { summary: summary.trim(), key_points: keyPoints });
+    toast({ title: 'Saved', description: 'Memory item updated successfully' });
   };
 
   const formatTimestamp = (seconds: number): string => {
@@ -202,28 +221,65 @@ export function EditRememberItemSheet({
     setSelectedTodos(new Set());
   };
 
+  const handleContentClick = (e: React.MouseEvent) => {
+    // Dismiss keyboard when tapping outside inputs
+    const target = e.target as HTMLElement;
+    if (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT' && !target.closest('button')) {
+      (document.activeElement as HTMLElement)?.blur();
+    }
+  };
+
+  const sheetHeight = isFullScreen ? 'h-[100dvh]' : 'h-[90dvh]';
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[90vh] flex flex-col">
-        <DrawerHeader className="border-b border-border shrink-0">
-          <DrawerTitle className="flex items-center gap-2">
-            <Brain className="h-5 w-5 text-remember" />
-            Edit Memory Item
-          </DrawerTitle>
+      <DrawerContent 
+        className={`${sheetHeight} flex flex-col transition-all duration-300`}
+        style={{ maxHeight: isFullScreen ? '100dvh' : '90dvh' }}
+      >
+        <DrawerHeader className="border-b border-border shrink-0 relative">
+          <div className="flex items-center justify-between">
+            <DrawerTitle className="flex items-center gap-2">
+              <Brain className="h-5 w-5 text-remember" />
+              Edit Memory Item
+            </DrawerTitle>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setIsFullScreen(!isFullScreen)}
+              className="h-8 w-8"
+              aria-label={isFullScreen ? 'Collapse' : 'Expand'}
+            >
+              {isFullScreen ? (
+                <Minimize2 className="h-4 w-4" />
+              ) : (
+                <Maximize2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
           <DrawerDescription>
             {item ? `Timestamp: ${formatTimestamp(item.timestamp_seconds)}` : ''}
           </DrawerDescription>
         </DrawerHeader>
 
-        <div className="flex-1 overflow-y-auto max-h-[calc(90vh-160px)] p-4 space-y-4">
+        <div 
+          ref={contentRef}
+          className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 pb-24"
+          onClick={handleContentClick}
+        >
           <div className="space-y-2">
             <Label htmlFor="edit-summary">Summary</Label>
             <Textarea
+              ref={summaryRef}
               id="edit-summary"
               placeholder="Summary of what to remember"
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
-              rows={3}
+              className="min-h-[180px] max-h-[300px] resize-none text-base leading-relaxed"
+              style={{ 
+                height: 'auto',
+                minHeight: '180px',
+              }}
             />
           </div>
 
@@ -393,7 +449,8 @@ export function EditRememberItemSheet({
           )}
         </div>
 
-        <DrawerFooter className="border-t border-border shrink-0 flex-row gap-2">
+        {/* Sticky Footer */}
+        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background p-4 flex gap-2 safe-area-inset-bottom">
           <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
             Cancel
           </Button>
@@ -401,7 +458,7 @@ export function EditRememberItemSheet({
             {isSaving && <Loader2 className="h-4 w-4 animate-spin mr-1" />}
             Save
           </Button>
-        </DrawerFooter>
+        </div>
       </DrawerContent>
     </Drawer>
   );
