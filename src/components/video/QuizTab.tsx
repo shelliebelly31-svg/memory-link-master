@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { CheckCircle2, XCircle, Trophy, RotateCcw, AlertTriangle, Play, Loader2, Sparkles } from 'lucide-react';
 import { QuizItem } from '@/types';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useTriggerQuizGeneration } from '@/hooks/useItemMutations';
+import { shuffleQuizOptions, trackCorrectAnswerPosition, ShuffledOption } from '@/lib/quizUtils';
 
 interface QuizTabProps {
   quizItems: QuizItem[];
@@ -15,7 +16,7 @@ interface QuizTabProps {
 
 export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQuestion }: QuizTabProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [isQuizStarted, setIsQuizStarted] = useState(false);
@@ -26,19 +27,42 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
   const currentQuestion = quizItems[currentQuestionIndex];
   const progress = quizItems.length > 0 ? ((currentQuestionIndex + 1) / quizItems.length) * 100 : 0;
 
+  // Memoize shuffled options for all questions (computed once per quiz session)
+  const shuffledQuestions = useMemo(() => {
+    return quizItems.map(q => {
+      const { shuffledOptions, correctOptionId } = shuffleQuizOptions(
+        q.options,
+        q.correct_answer,
+        q.shuffle_seed ?? Math.floor(Math.random() * 2147483647)
+      );
+      
+      // Track position of correct answer in dev mode
+      const correctPosition = shuffledOptions.findIndex(opt => opt.id === correctOptionId);
+      trackCorrectAnswerPosition(correctPosition);
+      
+      return {
+        questionId: q.id,
+        shuffledOptions,
+        correctOptionId,
+      };
+    });
+  }, [quizItems]);
+
+  const currentShuffled = shuffledQuestions[currentQuestionIndex];
+
   const weakQuestions = quizItems.filter(q => 
     q.times_answered > 0 && (q.times_correct / q.times_answered) < 0.5
   );
 
-  const handleAnswerSelect = (index: number) => {
+  const handleAnswerSelect = (optionId: string) => {
     if (showResult) return;
-    setSelectedAnswer(index);
+    setSelectedOptionId(optionId);
   };
 
   const handleSubmit = () => {
-    if (selectedAnswer === null) return;
+    if (selectedOptionId === null || !currentShuffled) return;
     setShowResult(true);
-    if (selectedAnswer === currentQuestion.correct_answer) {
+    if (selectedOptionId === currentShuffled.correctOptionId) {
       setScore(score + 1);
     }
   };
@@ -46,7 +70,7 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
   const handleNext = () => {
     if (currentQuestionIndex < quizItems.length - 1) {
       setCurrentQuestionIndex(currentQuestionIndex + 1);
-      setSelectedAnswer(null);
+      setSelectedOptionId(null);
       setShowResult(false);
     } else {
       setIsQuizComplete(true);
@@ -55,7 +79,7 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
 
   const handleRestart = () => {
     setCurrentQuestionIndex(0);
-    setSelectedAnswer(null);
+    setSelectedOptionId(null);
     setShowResult(false);
     setScore(0);
     setIsQuizComplete(false);
@@ -184,6 +208,8 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
     );
   }
 
+  if (!currentShuffled) return null;
+
   return (
     <div className="space-y-6">
       {/* Progress */}
@@ -202,43 +228,48 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
         <p className="font-medium text-lg leading-relaxed">{currentQuestion.question}</p>
         
         <div className="space-y-3">
-          {currentQuestion.options.map((option, index) => (
-            <button
-              key={index}
-              onClick={() => handleAnswerSelect(index)}
-              disabled={showResult}
-              className={cn(
-                "w-full p-4 rounded-lg border text-left transition-all duration-200",
-                selectedAnswer === index && !showResult && "border-primary bg-primary/10",
-                showResult && index === currentQuestion.correct_answer && "border-ai bg-ai/10",
-                showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && "border-destructive bg-destructive/10",
-                !showResult && selectedAnswer !== index && "border-border hover:border-primary/50 hover:bg-muted/50"
-              )}
-            >
-              <div className="flex items-center gap-3">
-                <div className={cn(
-                  "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0",
-                  selectedAnswer === index && !showResult && "border-primary",
-                  showResult && index === currentQuestion.correct_answer && "border-ai bg-ai",
-                  showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && "border-destructive bg-destructive",
-                )}>
-                  {showResult && index === currentQuestion.correct_answer && (
-                    <CheckCircle2 className="h-4 w-4 text-ai-foreground" />
-                  )}
-                  {showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && (
-                    <XCircle className="h-4 w-4 text-destructive-foreground" />
-                  )}
+          {currentShuffled.shuffledOptions.map((option) => {
+            const isCorrect = option.id === currentShuffled.correctOptionId;
+            const isSelected = selectedOptionId === option.id;
+            
+            return (
+              <button
+                key={option.id}
+                onClick={() => handleAnswerSelect(option.id)}
+                disabled={showResult}
+                className={cn(
+                  "w-full p-4 rounded-lg border text-left transition-all duration-200",
+                  isSelected && !showResult && "border-primary bg-primary/10",
+                  showResult && isCorrect && "border-ai bg-ai/10",
+                  showResult && isSelected && !isCorrect && "border-destructive bg-destructive/10",
+                  !showResult && !isSelected && "border-border hover:border-primary/50 hover:bg-muted/50"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <div className={cn(
+                    "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0",
+                    isSelected && !showResult && "border-primary",
+                    showResult && isCorrect && "border-ai bg-ai",
+                    showResult && isSelected && !isCorrect && "border-destructive bg-destructive",
+                  )}>
+                    {showResult && isCorrect && (
+                      <CheckCircle2 className="h-4 w-4 text-ai-foreground" />
+                    )}
+                    {showResult && isSelected && !isCorrect && (
+                      <XCircle className="h-4 w-4 text-destructive-foreground" />
+                    )}
+                  </div>
+                  <span>{option.text}</span>
                 </div>
-                <span>{option}</span>
-              </div>
-            </button>
-          ))}
+              </button>
+            );
+          })}
         </div>
 
         {showResult && (
           <div className={cn(
             "p-4 rounded-lg",
-            selectedAnswer === currentQuestion.correct_answer ? "bg-ai/10 border border-ai/30" : "bg-destructive/10 border border-destructive/30"
+            selectedOptionId === currentShuffled.correctOptionId ? "bg-ai/10 border border-ai/30" : "bg-destructive/10 border border-destructive/30"
           )}>
             <p className="text-sm">{currentQuestion.explanation}</p>
           </div>
@@ -250,7 +281,7 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
         {!showResult ? (
           <Button
             className="flex-1"
-            disabled={selectedAnswer === null}
+            disabled={selectedOptionId === null}
             onClick={handleSubmit}
           >
             Submit Answer

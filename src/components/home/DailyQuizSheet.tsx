@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft, Check } from 'lucide-react';
+import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -13,6 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { QuizItemWithVideo, useSaveQuizAttempt } from '@/hooks/useHomeData';
+import { shuffleQuizOptions, shuffleWithSeed, trackCorrectAnswerPosition, ShuffledOption } from '@/lib/quizUtils';
 
 interface DailyQuizSheetProps {
   open: boolean;
@@ -25,22 +26,13 @@ interface DailyQuizSheetProps {
   todaySeed: number;
 }
 
-// Seeded shuffle
-function seededRandom(seed: number) {
-  const x = Math.sin(seed) * 10000;
-  return x - Math.floor(x);
-}
-
-function shuffleWithSeed<T>(array: T[], seed: number): T[] {
-  const result = [...array];
-  for (let i = result.length - 1; i > 0; i--) {
-    const j = Math.floor(seededRandom(seed + i) * (i + 1));
-    [result[i], result[j]] = [result[j], result[i]];
-  }
-  return result;
-}
-
 type QuizMode = 'start' | 'pick_videos' | 'quiz' | 'complete';
+
+interface ShuffledQuestionData {
+  questionId: string;
+  shuffledOptions: ShuffledOption[];
+  correctOptionId: string;
+}
 
 export function DailyQuizSheet({ 
   open, 
@@ -54,14 +46,14 @@ export function DailyQuizSheet({
 }: DailyQuizSheetProps) {
   const [mode, setMode] = useState<QuizMode>('start');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [selectedAnswer, setSelectedAnswer] = useState<number | null>(null);
+  const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [questionCount, setQuestionCount] = useState(10);
   
   const saveAttempt = useSaveQuizAttempt();
 
-  // Get questions based on selection
+  // Get questions based on selection and shuffle with today's seed
   const activeQuestions = useMemo(() => {
     const filtered = selectedVideos.length > 0
       ? quizItems.filter(q => selectedVideos.includes(q.video_id))
@@ -69,8 +61,30 @@ export function DailyQuizSheet({
     return shuffleWithSeed(filtered, todaySeed).slice(0, questionCount);
   }, [quizItems, selectedVideos, todaySeed, questionCount]);
 
+  // Memoize shuffled options for all active questions
+  const shuffledQuestionsData = useMemo((): ShuffledQuestionData[] => {
+    return activeQuestions.map(q => {
+      const { shuffledOptions, correctOptionId } = shuffleQuizOptions(
+        q.options,
+        q.correct_answer,
+        q.shuffle_seed ?? Math.floor(Math.random() * 2147483647)
+      );
+      
+      // Track position in dev mode
+      const correctPosition = shuffledOptions.findIndex(opt => opt.id === correctOptionId);
+      trackCorrectAnswerPosition(correctPosition);
+      
+      return {
+        questionId: q.id,
+        shuffledOptions,
+        correctOptionId,
+      };
+    });
+  }, [activeQuestions]);
+
   const currentQuestion = activeQuestions[currentIndex];
-  const progress = ((currentIndex + 1) / activeQuestions.length) * 100;
+  const currentShuffled = shuffledQuestionsData[currentIndex];
+  const progress = activeQuestions.length > 0 ? ((currentIndex + 1) / activeQuestions.length) * 100 : 0;
 
   const handleVideoToggle = (videoId: string) => {
     if (selectedVideos.includes(videoId)) {
@@ -85,19 +99,19 @@ export function DailyQuizSheet({
     setMode('quiz');
     setCurrentIndex(0);
     setScore(0);
-    setSelectedAnswer(null);
+    setSelectedOptionId(null);
     setShowResult(false);
   };
 
-  const handleAnswerSelect = (index: number) => {
+  const handleAnswerSelect = (optionId: string) => {
     if (showResult) return;
-    setSelectedAnswer(index);
+    setSelectedOptionId(optionId);
   };
 
   const handleSubmit = () => {
-    if (selectedAnswer === null) return;
+    if (selectedOptionId === null || !currentShuffled) return;
     setShowResult(true);
-    if (selectedAnswer === currentQuestion.correct_answer) {
+    if (selectedOptionId === currentShuffled.correctOptionId) {
       setScore(s => s + 1);
     }
   };
@@ -105,7 +119,7 @@ export function DailyQuizSheet({
   const handleNext = () => {
     if (currentIndex < activeQuestions.length - 1) {
       setCurrentIndex(i => i + 1);
-      setSelectedAnswer(null);
+      setSelectedOptionId(null);
       setShowResult(false);
     } else {
       // Save attempt
@@ -123,7 +137,7 @@ export function DailyQuizSheet({
     onSelectVideos([]);
     setCurrentIndex(0);
     setScore(0);
-    setSelectedAnswer(null);
+    setSelectedOptionId(null);
     setShowResult(false);
   };
 
@@ -244,7 +258,7 @@ export function DailyQuizSheet({
           )}
 
           {/* Quiz Screen */}
-          {mode === 'quiz' && currentQuestion && (
+          {mode === 'quiz' && currentQuestion && currentShuffled && (
             <div className="space-y-6 p-4">
               {/* Progress */}
               <div className="space-y-2">
@@ -265,43 +279,48 @@ export function DailyQuizSheet({
                 </div>
                 
                 <div className="space-y-3">
-                  {currentQuestion.options.map((option, index) => (
-                    <button
-                      key={index}
-                      onClick={() => handleAnswerSelect(index)}
-                      disabled={showResult}
-                      className={cn(
-                        "w-full p-4 rounded-lg border text-left transition-all",
-                        selectedAnswer === index && !showResult && "border-primary bg-primary/10",
-                        showResult && index === currentQuestion.correct_answer && "border-ai bg-ai/10",
-                        showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && "border-destructive bg-destructive/10",
-                        !showResult && selectedAnswer !== index && "border-border hover:border-primary/50"
-                      )}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className={cn(
-                          "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0",
-                          selectedAnswer === index && !showResult && "border-primary",
-                          showResult && index === currentQuestion.correct_answer && "border-ai bg-ai",
-                          showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && "border-destructive bg-destructive",
-                        )}>
-                          {showResult && index === currentQuestion.correct_answer && (
-                            <CheckCircle2 className="h-4 w-4 text-ai-foreground" />
-                          )}
-                          {showResult && selectedAnswer === index && index !== currentQuestion.correct_answer && (
-                            <XCircle className="h-4 w-4 text-destructive-foreground" />
-                          )}
+                  {currentShuffled.shuffledOptions.map((option) => {
+                    const isCorrect = option.id === currentShuffled.correctOptionId;
+                    const isSelected = selectedOptionId === option.id;
+                    
+                    return (
+                      <button
+                        key={option.id}
+                        onClick={() => handleAnswerSelect(option.id)}
+                        disabled={showResult}
+                        className={cn(
+                          "w-full p-4 rounded-lg border text-left transition-all",
+                          isSelected && !showResult && "border-primary bg-primary/10",
+                          showResult && isCorrect && "border-ai bg-ai/10",
+                          showResult && isSelected && !isCorrect && "border-destructive bg-destructive/10",
+                          !showResult && !isSelected && "border-border hover:border-primary/50"
+                        )}
+                      >
+                        <div className="flex items-center gap-3">
+                          <div className={cn(
+                            "w-6 h-6 rounded-full border-2 flex items-center justify-center shrink-0",
+                            isSelected && !showResult && "border-primary",
+                            showResult && isCorrect && "border-ai bg-ai",
+                            showResult && isSelected && !isCorrect && "border-destructive bg-destructive",
+                          )}>
+                            {showResult && isCorrect && (
+                              <CheckCircle2 className="h-4 w-4 text-ai-foreground" />
+                            )}
+                            {showResult && isSelected && !isCorrect && (
+                              <XCircle className="h-4 w-4 text-destructive-foreground" />
+                            )}
+                          </div>
+                          <span>{option.text}</span>
                         </div>
-                        <span>{option}</span>
-                      </div>
-                    </button>
-                  ))}
+                      </button>
+                    );
+                  })}
                 </div>
 
                 {showResult && currentQuestion.explanation && (
                   <div className={cn(
                     "p-4 rounded-lg",
-                    selectedAnswer === currentQuestion.correct_answer 
+                    selectedOptionId === currentShuffled.correctOptionId 
                       ? "bg-ai/10 border border-ai/30" 
                       : "bg-destructive/10 border border-destructive/30"
                   )}>
@@ -315,7 +334,7 @@ export function DailyQuizSheet({
                 {!showResult ? (
                   <Button
                     className="flex-1"
-                    disabled={selectedAnswer === null}
+                    disabled={selectedOptionId === null}
                     onClick={handleSubmit}
                   >
                     Submit Answer
