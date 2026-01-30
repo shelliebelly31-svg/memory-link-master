@@ -7,6 +7,47 @@ import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
 import { QuickAddSheet } from './QuickAddSheet';
 
+// Hook to detect active text selection within a container
+function useSelectionActive(containerRef: React.RefObject<HTMLElement>) {
+  const [isSelectionActive, setIsSelectionActive] = useState(false);
+
+  useEffect(() => {
+    const handleSelectionChange = () => {
+      const selection = window.getSelection();
+      if (!selection || selection.isCollapsed || !containerRef.current) {
+        setIsSelectionActive(false);
+        return;
+      }
+
+      // Check if selection is within our transcript container
+      try {
+        const range = selection.getRangeAt(0);
+        const isInContainer = containerRef.current.contains(range.commonAncestorContainer);
+        setIsSelectionActive(isInContainer && selection.toString().trim().length > 0);
+      } catch {
+        setIsSelectionActive(false);
+      }
+    };
+
+    document.addEventListener('selectionchange', handleSelectionChange);
+    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+  }, [containerRef]);
+
+  // Apply/remove selection-active class on body for global CSS targeting
+  useEffect(() => {
+    if (isSelectionActive) {
+      document.body.classList.add('transcript-selection-active');
+    } else {
+      document.body.classList.remove('transcript-selection-active');
+    }
+    return () => {
+      document.body.classList.remove('transcript-selection-active');
+    };
+  }, [isSelectionActive]);
+
+  return isSelectionActive;
+}
+
 interface TranscriptViewProps {
   segments: TranscriptSegment[];
   highlights: Highlight[];
@@ -51,6 +92,10 @@ export function TranscriptView({
     segmentEnd: 0,
   });
   const containerRef = useRef<HTMLDivElement>(null);
+  const transcriptContentRef = useRef<HTMLDivElement>(null);
+  
+  // Track active selection for disabling pointer events on sticky elements
+  const isSelectionActive = useSelectionActive(transcriptContentRef);
 
   // Get all highlights that overlap with a segment
   const getSegmentHighlights = (segment: TranscriptSegment): Highlight[] => {
@@ -210,9 +255,21 @@ export function TranscriptView({
   const hasSelection = selection && highlightMode;
 
   return (
-    <div className="relative pb-32" ref={containerRef}>
-      {/* Sticky Header: Toggle + Quick Add Buttons */}
-      <div className="sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4 -mx-4 px-4 pt-1">
+    <div className="relative" ref={containerRef}>
+      {/* Sticky Header: Toggle + Quick Add Buttons - unselectable */}
+      <div 
+        className={cn(
+          "sticky top-0 z-20 bg-background/95 backdrop-blur-sm border-b border-border pb-3 mb-4 -mx-4 px-4 pt-1",
+          "select-none"
+        )}
+        style={{ 
+          WebkitUserSelect: 'none', 
+          userSelect: 'none',
+          // When selection active, disable pointer events to prevent handle interference
+          pointerEvents: isSelectionActive ? 'none' : 'auto',
+        }}
+        data-no-select
+      >
         {/* Highlight Mode Toggle Row */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -229,6 +286,7 @@ export function TranscriptView({
             checked={highlightMode}
             onCheckedChange={setHighlightMode}
             aria-label="Toggle highlight mode"
+            style={{ pointerEvents: 'auto' }} // Keep switch interactive
           />
         </div>
         <p className="text-xs text-muted-foreground mt-1">
@@ -238,7 +296,7 @@ export function TranscriptView({
         </p>
 
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
-        <div className="flex gap-2 mt-3">
+        <div className="flex gap-2 mt-3" style={{ pointerEvents: 'auto' }}>
           <Button
             variant="outline"
             size="sm"
@@ -279,8 +337,19 @@ export function TranscriptView({
         )}
       </div>
 
-      {/* Transcript Segments - Tight list layout with plus buttons */}
-      <div className={cn(highlightMode && "select-text cursor-text")}>
+      {/* Transcript Segments - Isolated selectable area with safe padding */}
+      <div 
+        ref={transcriptContentRef}
+        className={cn(
+          highlightMode && "select-text cursor-text",
+          "pt-4 pb-32" // Safe padding zones to prevent handle overlap with sticky elements
+        )}
+        style={{
+          WebkitUserSelect: highlightMode ? 'text' : 'auto',
+          userSelect: highlightMode ? 'text' : 'auto',
+          overscrollBehavior: 'contain', // Prevent scroll chaining during selection
+        }}
+      >
         {segments.map((segment, index) => {
           const segmentHighlights = getSegmentHighlights(segment);
           const hasHighlights = segmentHighlights.length > 0;
@@ -302,21 +371,25 @@ export function TranscriptView({
                 hasGap && "mt-3 pt-2 border-t border-border/30"
               )}
             >
-              {/* Plus button for quick add */}
+              {/* Plus button for quick add - unselectable */}
               <button
                 onClick={(e) => handlePlusClick(segment, e)}
                 className={cn(
-                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center",
+                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center select-none",
                   "border border-border/50 bg-background text-muted-foreground",
                   "hover:border-primary hover:text-primary hover:bg-primary/10",
                   "transition-colors opacity-0 group-hover:opacity-100",
                   "focus:opacity-100 focus:outline-none focus:ring-2 focus:ring-primary/30"
                 )}
+                style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
                 aria-label="Quick add this segment"
               >
                 <Plus className="h-3 w-3" />
               </button>
-              <span className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums">
+              <span 
+                className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums"
+                style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+              >
                 {formatTimestamp(segment.start_seconds)}
               </span>
               <span className="text-sm leading-snug flex-1">

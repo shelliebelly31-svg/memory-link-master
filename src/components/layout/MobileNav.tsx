@@ -16,7 +16,14 @@ export function MobileNav({ isAuthenticated = true, onLogout }: MobileNavProps) 
   const isActive = (path: string) => location.pathname === path;
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 px-4 py-2 pb-safe">
+    <nav 
+      className="fixed bottom-0 left-0 right-0 z-50 glass border-t border-border/50 px-4 py-2 pb-safe select-none"
+      style={{ 
+        WebkitUserSelect: 'none', 
+        userSelect: 'none',
+      }}
+      data-no-select
+    >
       <div className="flex items-center justify-around max-w-md mx-auto">
         <Link to="/home">
           <Button 
