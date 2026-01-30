@@ -201,3 +201,22 @@
     -webkit-tap-highlight-color: transparent;
   }
 }
+
+/* Mobile text selection isolation for transcript */
+/* Prevent selection on sticky elements */
+[data-no-select],
+[data-no-select] * {
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}
+
+/* When transcript selection is active, disable pointer events on sticky nav */
+body.transcript-selection-active nav[data-no-select] {
+  pointer-events: none !important;
+}
+
+/* Ensure transcript content remains selectable */
+body.transcript-selection-active [data-no-select] button,
+body.transcript-selection-active [data-no-select] [role="switch"] {
+  pointer-events: auto !important;
+}
