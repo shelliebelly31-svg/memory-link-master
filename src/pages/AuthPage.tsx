@@ -62,7 +62,7 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-2">
               <Brain className="h-8 w-8 text-primary" />
             </div>
-            <h1 className="text-3xl font-bold tracking-tight">Media Me</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Memory Link</h1>
             <p className="text-muted-foreground">
               Turn media into action, memory, and momentum
             </p>
