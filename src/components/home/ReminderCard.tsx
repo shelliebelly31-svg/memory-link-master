@@ -1,4 +1,4 @@
-import { Play, MessageSquare, Trash2 } from 'lucide-react';
+import { Play, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -8,7 +8,6 @@ interface ReminderCardProps {
   reminder: CombinedReminder;
   index: number;
   onOpenVideo: () => void;
-  onTextMe: () => void;
   onDelete: () => void;
 }
 
@@ -18,7 +17,7 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function ReminderCard({ reminder, index, onOpenVideo, onTextMe, onDelete }: ReminderCardProps) {
+export function ReminderCard({ reminder, index, onOpenVideo, onDelete }: ReminderCardProps) {
   return (
     <Card 
       className="card-elevated animate-fade-up"
@@ -67,24 +66,15 @@ export function ReminderCard({ reminder, index, onOpenVideo, onTextMe, onDelete 
         </div>
 
         {/* Actions */}
-        <div className="flex gap-2 pt-1">
+        <div className="pt-1">
           <Button
             variant="outline"
             size="sm"
             onClick={onOpenVideo}
-            className="flex-1"
+            className="w-full"
           >
             <Play className="h-3 w-3" />
             Open Video
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onTextMe}
-            className="flex-1"
-          >
-            <MessageSquare className="h-3 w-3" />
-            Text Me
           </Button>
         </div>
       </CardContent>

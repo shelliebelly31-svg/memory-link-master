@@ -1,6 +1,6 @@
 import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, MessageSquare, Calendar, Loader2, Plus } from 'lucide-react';
+import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, Loader2, Plus } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -9,7 +9,6 @@ import { useAllRememberItems, useAllTasks, useAllQuizItems, useAllRemindersCombi
 import { ReminderCard } from '@/components/home/ReminderCard';
 import { CombinedTasksSheet } from '@/components/home/CombinedTasksSheet';
 import { DailyQuizSheet } from '@/components/home/DailyQuizSheet';
-import { TextMeDialog } from '@/components/home/TextMeDialog';
 import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
 import { toast } from 'sonner';
@@ -46,8 +45,6 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const [tasksOpen, setTasksOpen] = useState(false);
   const [quizOpen, setQuizOpen] = useState(false);
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
-  const [textMeOpen, setTextMeOpen] = useState(false);
-  const [selectedReminder, setSelectedReminder] = useState<CombinedReminder | null>(null);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
   
@@ -114,10 +111,6 @@ export default function HomePage({ onLogout }: HomePageProps) {
     navigate(`/video/${videoId}${timestamp ? `?t=${timestamp}` : ''}`);
   };
 
-  const handleTextMe = (reminder: CombinedReminder) => {
-    setSelectedReminder(reminder);
-    setTextMeOpen(true);
-  };
 
   const handleDeleteReminder = useCallback((reminder: CombinedReminder, index: number) => {
     // Find current index in shuffled list for restore position
@@ -253,7 +246,6 @@ export default function HomePage({ onLogout }: HomePageProps) {
                       reminder={reminder}
                       index={index}
                       onOpenVideo={() => handleOpenVideo(reminder.video_id, reminder.timestamp_seconds)}
-                      onTextMe={() => handleTextMe(reminder)}
                       onDelete={() => handleDeleteReminder(reminder, index)}
                     />
                   ))}
@@ -392,11 +384,6 @@ export default function HomePage({ onLogout }: HomePageProps) {
         todaySeed={todaySeed}
       />
 
-      <TextMeDialog
-        open={textMeOpen}
-        onOpenChange={setTextMeOpen}
-        reminder={selectedReminder}
-      />
 
       <AddReminderDialog
         open={addReminderOpen}
