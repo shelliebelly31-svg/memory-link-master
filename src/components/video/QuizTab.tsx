@@ -6,15 +6,17 @@ import { Progress } from '@/components/ui/progress';
 import { cn } from '@/lib/utils';
 import { useTriggerQuizGeneration } from '@/hooks/useItemMutations';
 import { shuffleQuizOptions, trackCorrectAnswerPosition, ShuffledOption } from '@/lib/quizUtils';
+import { ShareQuizDialog } from './ShareQuizDialog';
 
 interface QuizTabProps {
   quizItems: QuizItem[];
   videoId: string;
+  videoTitle: string;
   rememberItemsCount: number;
   onRegenerateQuestion: (questionId: string) => void;
 }
 
-export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQuestion }: QuizTabProps) {
+export function QuizTab({ quizItems, videoId, videoTitle, rememberItemsCount, onRegenerateQuestion }: QuizTabProps) {
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
   const [selectedOptionId, setSelectedOptionId] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
@@ -200,10 +202,13 @@ export function QuizTab({ quizItems, videoId, rememberItemsCount, onRegenerateQu
         <p className="text-muted-foreground mb-6">
           {percentage >= 70 ? "Great job!" : percentage >= 50 ? "Good effort!" : "Keep practicing!"}
         </p>
-        <Button variant="glow" onClick={handleRestart}>
-          <RotateCcw className="h-4 w-4" />
-          Try Again
-        </Button>
+        <div className="flex gap-3 justify-center flex-wrap">
+          <Button variant="glow" onClick={handleRestart}>
+            <RotateCcw className="h-4 w-4" />
+            Try Again
+          </Button>
+          <ShareQuizDialog quizItems={quizItems} videoTitle={videoTitle} />
+        </div>
       </div>
     );
   }

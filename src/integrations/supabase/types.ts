@@ -333,6 +333,74 @@ export type Database = {
           },
         ]
       }
+      shared_quiz_attempts: {
+        Row: {
+          answers: Json
+          created_at: string
+          id: string
+          score: number
+          session_id: string
+          shared_quiz_id: string
+          total_questions: number
+        }
+        Insert: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          score: number
+          session_id: string
+          shared_quiz_id: string
+          total_questions: number
+        }
+        Update: {
+          answers?: Json
+          created_at?: string
+          id?: string
+          score?: number
+          session_id?: string
+          shared_quiz_id?: string
+          total_questions?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "shared_quiz_attempts_shared_quiz_id_fkey"
+            columns: ["shared_quiz_id"]
+            isOneToOne: false
+            referencedRelation: "shared_quizzes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      shared_quizzes: {
+        Row: {
+          created_at: string
+          creator_user_id: string
+          id: string
+          is_active: boolean
+          questions: Json
+          share_token: string
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          creator_user_id: string
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          share_token: string
+          title: string
+        }
+        Update: {
+          created_at?: string
+          creator_user_id?: string
+          id?: string
+          is_active?: boolean
+          questions?: Json
+          share_token?: string
+          title?: string
+        }
+        Relationships: []
+      }
       tasks: {
         Row: {
           checklist_items: Json | null
