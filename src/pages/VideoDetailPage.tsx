@@ -387,6 +387,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                     topic: q.topic || '',
                   })) : []}
                   videoId={video.id}
+                  videoTitle={video.title}
                   rememberItemsCount={rememberItems.length}
                   onRegenerateQuestion={handleRegenerateQuestion}
                 />
