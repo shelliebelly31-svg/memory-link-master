@@ -1,5 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
-import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft, Sparkles } from 'lucide-react';
+import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft, Sparkles, Share2, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -7,14 +7,24 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
 import { Checkbox } from '@/components/ui/checkbox';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { QuizItemWithVideo, useSaveQuizAttempt } from '@/hooks/useHomeData';
 import { shuffleQuizOptions, shuffleWithSeed, trackCorrectAnswerPosition, ShuffledOption } from '@/lib/quizUtils';
 import { useToast } from '@/hooks/use-toast';
+import { useCreateSharedQuiz } from '@/hooks/useSharedQuiz';
 
 interface DailyQuizSheetProps {
   open: boolean;
@@ -53,9 +63,13 @@ export function DailyQuizSheet({
   const [questionCount, setQuestionCount] = useState(10);
   const [attemptSeed, setAttemptSeed] = useState(todaySeed);
   const [lastAttemptQuestionIds, setLastAttemptQuestionIds] = useState<Set<string>>(new Set());
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
   
   const saveAttempt = useSaveQuizAttempt();
   const { toast } = useToast();
+  const { createSharedQuiz, isCreating: isCreatingShare } = useCreateSharedQuiz();
 
   // Get questions based on selection, prioritizing unused questions, then shuffle
   const activeQuestions = useMemo(() => {
@@ -179,6 +193,88 @@ export function DailyQuizSheet({
     setScore(0);
     setSelectedOptionId(null);
     setShowResult(false);
+    // Reset share state
+    setShareDialogOpen(false);
+    setShareUrl(null);
+    setCopied(false);
+  };
+
+  const handleShareQuiz = async () => {
+    // Create a title based on video selection
+    const title = selectedVideos.length === 1 
+      ? allVideos.find(v => v.id === selectedVideos[0])?.title || 'Daily Quiz'
+      : `Daily Quiz (${activeQuestions.length} questions)`;
+    
+    // Convert active questions to QuizItem format for sharing
+    const quizItemsToShare = activeQuestions.map(q => ({
+      id: q.id,
+      remember_item_id: q.remember_item_id,
+      user_id: q.user_id,
+      question: q.question,
+      options: q.options,
+      correct_answer: q.correct_answer,
+      shuffle_seed: q.shuffle_seed,
+      explanation: q.explanation || '',
+      times_answered: q.times_answered,
+      times_correct: q.times_correct,
+      video_id: q.video_id,
+      video_title: q.video_title,
+      topic: q.topic || '',
+      created_at: q.created_at,
+    }));
+    
+    const token = await createSharedQuiz(title, quizItemsToShare);
+    if (token) {
+      const url = `${window.location.origin}/quiz/${token}`;
+      setShareUrl(url);
+    }
+  };
+
+  const handleCopyLink = async () => {
+    if (!shareUrl) return;
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setCopied(true);
+      toast({
+        title: "Link copied!",
+        description: "Share this link with others to let them take the quiz",
+      });
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      toast({
+        title: "Copy failed",
+        description: "Please copy the link manually",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleNativeShare = async () => {
+    if (!shareUrl) return;
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: 'Take my quiz!',
+          text: `Challenge yourself with this quiz I created!`,
+          url: shareUrl,
+        });
+      } catch (err) {
+        // User cancelled or share failed, fall back to copy
+        if ((err as Error).name !== 'AbortError') {
+          handleCopyLink();
+        }
+      }
+    } else {
+      handleCopyLink();
+    }
+  };
+
+  const handleShareDialogChange = (open: boolean) => {
+    setShareDialogOpen(open);
+    if (!open) {
+      setShareUrl(null);
+      setCopied(false);
+    }
   };
 
   const handleClose = () => {
@@ -454,6 +550,89 @@ export function DailyQuizSheet({
                     <Sparkles className="h-4 w-4" />
                     Regenerate & Try Again
                   </Button>
+                  
+                  {/* Share Quiz Dialog */}
+                  <Dialog open={shareDialogOpen} onOpenChange={handleShareDialogChange}>
+                    <DialogTrigger asChild>
+                      <Button variant="outline" className="w-full">
+                        <Share2 className="h-4 w-4" />
+                        Share Quiz
+                      </Button>
+                    </DialogTrigger>
+                    <DialogContent className="sm:max-w-md">
+                      <DialogHeader>
+                        <DialogTitle>Share Quiz</DialogTitle>
+                        <DialogDescription>
+                          Create a shareable link so others can take this quiz. They won't need an account!
+                        </DialogDescription>
+                      </DialogHeader>
+                      
+                      {!shareUrl ? (
+                        <div className="space-y-4 pt-4">
+                          <p className="text-sm text-muted-foreground">
+                            This will create a public quiz with {activeQuestions.length} questions that anyone can take.
+                          </p>
+                          <Button 
+                            onClick={handleShareQuiz} 
+                            disabled={isCreatingShare}
+                            className="w-full"
+                            variant="glow"
+                          >
+                            {isCreatingShare ? (
+                              <>
+                                <Loader2 className="h-4 w-4 animate-spin" />
+                                Creating link...
+                              </>
+                            ) : (
+                              <>
+                                <Share2 className="h-4 w-4" />
+                                Generate Share Link
+                              </>
+                            )}
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-4 pt-4">
+                          <div className="flex gap-2">
+                            <Input 
+                              value={shareUrl} 
+                              readOnly 
+                              className="font-mono text-sm"
+                            />
+                            <Button 
+                              variant="outline" 
+                              size="icon"
+                              onClick={handleCopyLink}
+                            >
+                              {copied ? (
+                                <Check className="h-4 w-4 text-ai" />
+                              ) : (
+                                <Copy className="h-4 w-4" />
+                              )}
+                            </Button>
+                          </div>
+                          <div className="flex gap-2">
+                            <Button 
+                              variant="outline" 
+                              className="flex-1"
+                              onClick={() => window.open(shareUrl, '_blank')}
+                            >
+                              <ExternalLink className="h-4 w-4" />
+                              Preview
+                            </Button>
+                            <Button 
+                              variant="glow" 
+                              className="flex-1"
+                              onClick={handleNativeShare}
+                            >
+                              <Share2 className="h-4 w-4" />
+                              Share
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </DialogContent>
+                  </Dialog>
                 </div>
               </div>
             </div>
