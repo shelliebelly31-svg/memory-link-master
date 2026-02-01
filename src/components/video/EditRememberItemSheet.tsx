@@ -52,6 +52,7 @@ export function EditRememberItemSheet({
   const [selectedKeyPoints, setSelectedKeyPoints] = useState<Set<number>>(new Set());
   const [selectedTodos, setSelectedTodos] = useState<Set<number>>(new Set());
   const [isFullScreen, setIsFullScreen] = useState(false);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   
   const { toast } = useToast();
   const createTaskMutation = useCreateManualTask();
@@ -69,6 +70,33 @@ export function EditRememberItemSheet({
       setIsFullScreen(false);
     }
   }, [item, open]);
+
+  // Handle keyboard visibility using visualViewport API
+  useEffect(() => {
+    if (!open) return;
+
+    const viewport = window.visualViewport;
+    if (!viewport) return;
+
+    const handleResize = () => {
+      // Calculate keyboard height from viewport difference
+      const windowHeight = window.innerHeight;
+      const viewportHeight = viewport.height;
+      const newKeyboardHeight = Math.max(0, windowHeight - viewportHeight);
+      setKeyboardHeight(newKeyboardHeight);
+    };
+
+    viewport.addEventListener('resize', handleResize);
+    viewport.addEventListener('scroll', handleResize);
+    
+    // Initial check
+    handleResize();
+
+    return () => {
+      viewport.removeEventListener('resize', handleResize);
+      viewport.removeEventListener('scroll', handleResize);
+    };
+  }, [open]);
 
   // Scroll to focused element when keyboard opens
   useEffect(() => {
@@ -264,7 +292,8 @@ export function EditRememberItemSheet({
 
         <div 
           ref={contentRef}
-          className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4 pb-24"
+          className="flex-1 overflow-y-auto overscroll-contain p-4 space-y-4"
+          style={{ paddingBottom: keyboardHeight > 0 ? `${keyboardHeight + 80}px` : '96px' }}
           onClick={handleContentClick}
         >
           <div className="space-y-2">
@@ -449,8 +478,14 @@ export function EditRememberItemSheet({
           )}
         </div>
 
-        {/* Sticky Footer */}
-        <div className="absolute bottom-0 left-0 right-0 border-t border-border bg-background p-4 flex gap-2 safe-area-inset-bottom">
+        {/* Sticky Footer - positioned above keyboard */}
+        <div 
+          className="fixed left-0 right-0 border-t border-border bg-background p-4 flex gap-2 z-50 transition-all duration-150"
+          style={{ 
+            bottom: keyboardHeight > 0 ? `${keyboardHeight}px` : '0px',
+            paddingBottom: keyboardHeight > 0 ? '16px' : 'max(16px, env(safe-area-inset-bottom))'
+          }}
+        >
           <Button variant="outline" onClick={() => onOpenChange(false)} className="flex-1">
             Cancel
           </Button>
