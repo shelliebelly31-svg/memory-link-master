@@ -1,5 +1,5 @@
-import { useState, useMemo } from 'react';
-import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft } from 'lucide-react';
+import { useState, useMemo, useCallback } from 'react';
+import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft, Sparkles } from 'lucide-react';
 import {
   Sheet,
   SheetContent,
@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { cn } from '@/lib/utils';
 import { QuizItemWithVideo, useSaveQuizAttempt } from '@/hooks/useHomeData';
 import { shuffleQuizOptions, shuffleWithSeed, trackCorrectAnswerPosition, ShuffledOption } from '@/lib/quizUtils';
+import { useToast } from '@/hooks/use-toast';
 
 interface DailyQuizSheetProps {
   open: boolean;
@@ -50,24 +51,44 @@ export function DailyQuizSheet({
   const [showResult, setShowResult] = useState(false);
   const [score, setScore] = useState(0);
   const [questionCount, setQuestionCount] = useState(10);
+  const [attemptSeed, setAttemptSeed] = useState(todaySeed);
+  const [lastAttemptQuestionIds, setLastAttemptQuestionIds] = useState<Set<string>>(new Set());
   
   const saveAttempt = useSaveQuizAttempt();
+  const { toast } = useToast();
 
-  // Get questions based on selection and shuffle with today's seed
+  // Get questions based on selection, prioritizing unused questions, then shuffle
   const activeQuestions = useMemo(() => {
     const filtered = selectedVideos.length > 0
       ? quizItems.filter(q => selectedVideos.includes(q.video_id))
       : quizItems;
-    return shuffleWithSeed(filtered, todaySeed).slice(0, questionCount);
-  }, [quizItems, selectedVideos, todaySeed, questionCount]);
+    
+    // If we have last attempt's questions, try to prioritize different ones
+    if (lastAttemptQuestionIds.size > 0) {
+      const unusedQuestions = filtered.filter(q => !lastAttemptQuestionIds.has(q.id));
+      const usedQuestions = filtered.filter(q => lastAttemptQuestionIds.has(q.id));
+      
+      // Shuffle both pools separately
+      const shuffledUnused = shuffleWithSeed(unusedQuestions, attemptSeed);
+      const shuffledUsed = shuffleWithSeed(usedQuestions, attemptSeed + 1);
+      
+      // Prefer unused, fill with used if needed
+      const combined = [...shuffledUnused, ...shuffledUsed];
+      return combined.slice(0, questionCount);
+    }
+    
+    return shuffleWithSeed(filtered, attemptSeed).slice(0, questionCount);
+  }, [quizItems, selectedVideos, attemptSeed, questionCount, lastAttemptQuestionIds]);
 
   // Memoize shuffled options for all active questions
   const shuffledQuestionsData = useMemo((): ShuffledQuestionData[] => {
     return activeQuestions.map(q => {
+      // Use a combination of attemptSeed and question's shuffle_seed for variety
+      const optionSeed = (q.shuffle_seed ?? 0) ^ attemptSeed;
       const { shuffledOptions, correctOptionId } = shuffleQuizOptions(
         q.options,
         q.correct_answer,
-        q.shuffle_seed ?? Math.floor(Math.random() * 2147483647)
+        optionSeed
       );
       
       // Track position in dev mode
@@ -80,7 +101,7 @@ export function DailyQuizSheet({
         correctOptionId,
       };
     });
-  }, [activeQuestions]);
+  }, [activeQuestions, attemptSeed]);
 
   const currentQuestion = activeQuestions[currentIndex];
   const currentShuffled = shuffledQuestionsData[currentIndex];
@@ -93,6 +114,21 @@ export function DailyQuizSheet({
       onSelectVideos([...selectedVideos, videoId]);
     }
   };
+
+  const handleRegenerate = useCallback(() => {
+    // Store current questions as "last attempt" to avoid
+    const currentQuestionIds = new Set(activeQuestions.map(q => q.id));
+    setLastAttemptQuestionIds(currentQuestionIds);
+    
+    // Generate new random seed
+    const newSeed = Math.floor(Math.random() * 2147483647);
+    setAttemptSeed(newSeed);
+    
+    toast({
+      title: "New quiz generated!",
+      description: "Questions have been reshuffled",
+    });
+  }, [activeQuestions, toast]);
 
   const handleStartQuiz = () => {
     if (activeQuestions.length === 0) return;
@@ -133,6 +169,10 @@ export function DailyQuizSheet({
   };
 
   const handleReset = () => {
+    // Store current questions as last attempt before resetting
+    const currentQuestionIds = new Set(activeQuestions.map(q => q.id));
+    setLastAttemptQuestionIds(currentQuestionIds);
+    
     setMode('start');
     onSelectVideos([]);
     setCurrentIndex(0);
@@ -173,23 +213,34 @@ export function DailyQuizSheet({
                 </p>
               </div>
 
-              <div className="flex gap-3">
+              <div className="flex flex-col gap-3">
+                <div className="flex gap-3">
+                  <Button 
+                    variant="glow" 
+                    className="flex-1"
+                    onClick={handleStartQuiz}
+                    disabled={quizItems.length === 0}
+                  >
+                    <Play className="h-4 w-4" />
+                    Start Daily Quiz
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    className="flex-1"
+                    onClick={() => setMode('pick_videos')}
+                    disabled={allVideos.length === 0}
+                  >
+                    Pick Videos
+                  </Button>
+                </div>
                 <Button 
-                  variant="glow" 
-                  className="flex-1"
-                  onClick={handleStartQuiz}
+                  variant="ghost" 
+                  onClick={handleRegenerate}
                   disabled={quizItems.length === 0}
+                  className="w-full"
                 >
-                  <Play className="h-4 w-4" />
-                  Start Daily Quiz
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => setMode('pick_videos')}
-                  disabled={allVideos.length === 0}
-                >
-                  Pick Videos
+                  <Sparkles className="h-4 w-4" />
+                  Regenerate Quiz
                 </Button>
               </div>
             </div>
@@ -246,14 +297,25 @@ export function DailyQuizSheet({
                 })}
               </div>
 
-              <Button 
-                className="w-full" 
-                onClick={handleStartQuiz}
-                disabled={selectedVideos.length > 0 && activeQuestions.length === 0}
-              >
-                <Play className="h-4 w-4" />
-                Start Quiz ({selectedVideos.length > 0 ? activeQuestions.length : quizItems.length} questions)
-              </Button>
+              <div className="flex flex-col gap-2">
+                <Button 
+                  className="w-full" 
+                  onClick={handleStartQuiz}
+                  disabled={selectedVideos.length > 0 && activeQuestions.length === 0}
+                >
+                  <Play className="h-4 w-4" />
+                  Start Quiz ({selectedVideos.length > 0 ? activeQuestions.length : quizItems.length} questions)
+                </Button>
+                <Button 
+                  variant="ghost" 
+                  onClick={handleRegenerate}
+                  disabled={(selectedVideos.length > 0 ? activeQuestions.length : quizItems.length) === 0}
+                  className="w-full"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Regenerate Quiz
+                </Button>
+              </div>
             </div>
           )}
 
@@ -371,13 +433,26 @@ export function DailyQuizSheet({
                   {(score / activeQuestions.length) >= 0.7 ? "Great job! 🎉" : 
                    (score / activeQuestions.length) >= 0.5 ? "Good effort! 💪" : "Keep practicing! 📚"}
                 </p>
-                <div className="flex gap-3">
-                  <Button variant="outline" className="flex-1" onClick={handleReset}>
-                    <RotateCcw className="h-4 w-4" />
-                    New Quiz
-                  </Button>
-                  <Button className="flex-1" onClick={handleClose}>
-                    Done
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-3">
+                    <Button variant="outline" className="flex-1" onClick={handleReset}>
+                      <RotateCcw className="h-4 w-4" />
+                      New Quiz
+                    </Button>
+                    <Button className="flex-1" onClick={handleClose}>
+                      Done
+                    </Button>
+                  </div>
+                  <Button 
+                    variant="ghost" 
+                    onClick={() => {
+                      handleRegenerate();
+                      handleReset();
+                    }}
+                    className="w-full"
+                  >
+                    <Sparkles className="h-4 w-4" />
+                    Regenerate & Try Again
                   </Button>
                 </div>
               </div>
