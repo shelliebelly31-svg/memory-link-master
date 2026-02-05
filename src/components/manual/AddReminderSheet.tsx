@@ -195,15 +195,18 @@ export function AddReminderSheet({
   const canSave = title.trim().length > 0;
   const timestampDisplay = formatTimestampRange();
 
+  // Determine if we have long prefilled text that needs review
+  const hasLongPrefill = (prefillTitle?.length || 0) > 80;
+
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[85vh] flex flex-col">
+      <DrawerContent className="max-h-[90vh] flex flex-col">
         {/* Fixed Header */}
         <DrawerHeader className="border-b border-border shrink-0">
           <div className="flex items-center justify-between">
             <DrawerTitle className="flex items-center gap-2">
               <Brain className="h-5 w-5 text-remember" />
-              Add Reminder
+              {hasLongPrefill ? 'Review & Save Reminder' : 'Add Reminder'}
             </DrawerTitle>
             <Button
               variant="outline"
@@ -220,21 +223,39 @@ export function AddReminderSheet({
               Generate key points
             </Button>
           </div>
-          <DrawerDescription>Create a custom reminder to remember later</DrawerDescription>
+          <DrawerDescription>
+            {hasLongPrefill 
+              ? 'Review and edit your highlighted text before saving' 
+              : 'Create a custom reminder to remember later'}
+          </DrawerDescription>
         </DrawerHeader>
 
         {/* Scrollable Content */}
-        <div className="flex-1 overflow-y-auto max-h-[calc(85vh-160px)] p-4 space-y-4">
-            {/* Title */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {/* Title/Content - Multi-line expandable textarea for long text */}
             <div className="space-y-2">
-              <Label htmlFor="reminder-title">Title</Label>
-              <Input
+              <Label htmlFor="reminder-title">
+                {hasLongPrefill ? 'Highlighted Text' : 'Title'}
+              </Label>
+              <Textarea
                 id="reminder-title"
                 placeholder="What do you want to remember?"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoFocus
+                className="min-h-[80px] max-h-[40vh] resize-y"
+                style={{
+                  // Auto-expand based on content, with reasonable limits
+                  height: hasLongPrefill ? 'auto' : undefined,
+                  minHeight: hasLongPrefill ? '120px' : '80px',
+                }}
+                rows={hasLongPrefill ? Math.min(Math.ceil(title.length / 50), 10) : 3}
               />
+              {title.length > 200 && (
+                <p className="text-xs text-muted-foreground">
+                  {title.length} characters
+                </p>
+              )}
             </div>
 
             {/* Notes */}
@@ -245,7 +266,8 @@ export function AddReminderSheet({
                 placeholder="Add any additional details..."
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                rows={4}
+                rows={3}
+                className="min-h-[60px] resize-y"
               />
             </div>
 
