@@ -176,6 +176,7 @@ export function AddReminderSheet({
         notes: notes.trim() || undefined,
         video_id: videoId,
         timestamp_seconds: timestampSeconds ?? undefined,
+        end_timestamp_seconds: endTimestampSeconds ?? undefined,
         schedule_at: sendAt,
         repeat_type: repeatType,
         repeat_days: repeatType === 'custom_days' ? selectedDays : undefined,

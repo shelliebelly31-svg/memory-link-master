@@ -111,6 +111,7 @@ export function AddTodoSheet({
         description: description || undefined,
         video_id: videoId,
         timestamp_seconds: timestampSeconds ?? undefined,
+        end_timestamp_seconds: endTimestampSeconds ?? undefined,
         due_date: dueDate || undefined,
       },
       {
