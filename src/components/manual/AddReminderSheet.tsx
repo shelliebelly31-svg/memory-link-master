@@ -55,7 +55,7 @@ export function AddReminderSheet({
   const [timestampSeconds, setTimestampSeconds] = useState<number | null>(null);
   const [endTimestampSeconds, setEndTimestampSeconds] = useState<number | null>(null);
   const [scheduleDate, setScheduleDate] = useState('');
-  const [scheduleTime, setScheduleTime] = useState('09:00');
+  const [scheduleTime, setScheduleTime] = useState('');
   const [repeatType, setRepeatType] = useState<RepeatType>('one_time');
   const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [multipleDates, setMultipleDates] = useState<{ date: string; time: string }[]>([]);
@@ -71,7 +71,7 @@ export function AddReminderSheet({
       setTimestampSeconds(prefillTimestamp ?? null);
       setEndTimestampSeconds(prefillEndTimestamp ?? null);
       setScheduleDate('');
-      setScheduleTime('09:00');
+      setScheduleTime('');
       setRepeatType('one_time');
       setSelectedDays([]);
       setMultipleDates([]);
