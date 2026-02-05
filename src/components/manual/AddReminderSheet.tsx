@@ -232,14 +232,12 @@ export function AddReminderSheet({
 
         {/* Scrollable Content */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-            {/* Title/Content - Multi-line expandable textarea for long text */}
+            {/* Selected Text - Multi-line expandable textarea for long text */}
             <div className="space-y-2">
-              <Label htmlFor="reminder-title">
-                {hasLongPrefill ? 'Highlighted Text' : 'Title'}
-              </Label>
+              <Label htmlFor="reminder-title">Selected Text</Label>
               <Textarea
                 id="reminder-title"
-                placeholder="What do you want to remember?"
+                placeholder="This is the text you selected. You can edit it before saving."
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 autoFocus
