@@ -27,11 +27,19 @@ export function QuickAddSheet({
   onSelectReminder,
   onSelectTodo,
 }: QuickAddSheetProps) {
-  const formatTimestamp = (seconds: number): string => {
-    const mins = Math.floor(seconds / 60);
-    const secs = Math.floor(seconds % 60);
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  // Extract first and last words from the selected text
+  const getTextMarkers = (text: string): { first: string; last: string } => {
+    const words = text.trim().split(/\s+/).filter(w => w.length > 0);
+    if (words.length === 0) return { first: '', last: '' };
+    if (words.length === 1) return { first: words[0], last: words[0] };
+    
+    // Get first few words and last few words
+    const firstWords = words.slice(0, 3).join(' ');
+    const lastWords = words.slice(-2).join(' ');
+    return { first: firstWords, last: lastWords };
   };
+
+  const markers = getTextMarkers(segmentText);
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
@@ -44,13 +52,21 @@ export function QuickAddSheet({
         </DrawerHeader>
 
         <div className="p-4 space-y-4">
-          {/* Preview text */}
+          {/* Preview with word markers */}
           <div className="bg-muted/50 p-3 rounded-lg border border-border">
-            <p className="text-sm line-clamp-3 text-muted-foreground">
-              "{segmentText.slice(0, 150)}{segmentText.length > 150 ? '...' : ''}"
-            </p>
-            <p className="text-xs text-muted-foreground/70 mt-1">
-              {formatTimestamp(segmentStart)} - {formatTimestamp(segmentEnd)}
+            <div className="flex items-center gap-2 text-sm">
+              <span className="inline-flex items-center gap-1">
+                <span className="w-2 h-2 rounded-full bg-remember shrink-0"></span>
+                <span className="text-muted-foreground font-medium">{markers.first}</span>
+              </span>
+              <span className="text-muted-foreground/50">...</span>
+              <span className="inline-flex items-center gap-1">
+                <span className="text-muted-foreground font-medium">{markers.last}</span>
+                <span className="w-2 h-2 rounded-full bg-remember shrink-0"></span>
+              </span>
+            </div>
+            <p className="text-xs text-muted-foreground/70 mt-2 line-clamp-2">
+              "{segmentText.slice(0, 100)}{segmentText.length > 100 ? '...' : ''}"
             </p>
           </div>
 
