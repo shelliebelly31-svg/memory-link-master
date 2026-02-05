@@ -64,6 +64,8 @@ interface SelectionState {
   text: string;
   startSeconds: number;
   endSeconds: number;
+  // Frozen snapshot - captured immediately to prevent loss during scroll
+  frozen: boolean;
 }
 
 interface QuickAddState {
@@ -104,28 +106,23 @@ export function TranscriptView({
     );
   };
 
-  // Process selection and show toolbar
-  const processSelection = useCallback(() => {
+  // Capture selection using absolute indices to prevent loss during scroll
+  const captureSelectionSnapshot = useCallback((): SelectionState | null => {
     const windowSelection = window.getSelection();
     
-    // If no valid selection, hide toolbar
     if (!windowSelection || windowSelection.isCollapsed) {
-      setSelection(null);
-      return;
+      return null;
     }
 
     const selectedText = windowSelection.toString().trim();
     if (!selectedText || selectedText.length === 0) {
-      setSelection(null);
-      return;
+      return null;
     }
 
-    // Find which segment(s) the selection spans
     const range = windowSelection.getRangeAt(0);
     const container = containerRef.current;
     if (!container || !container.contains(range.commonAncestorContainer)) {
-      setSelection(null);
-      return;
+      return null;
     }
 
     // Find the segment elements that contain the selection
@@ -148,13 +145,28 @@ export function TranscriptView({
     });
 
     if (startSeconds !== null && endSeconds !== null) {
-      setSelection({
+      return {
         text: selectedText,
         startSeconds,
         endSeconds,
-      });
+        frozen: true,
+      };
     }
+    return null;
   }, []);
+
+  // Process selection and update state (for UI preview only)
+  const processSelection = useCallback(() => {
+    // Don't overwrite a frozen selection
+    if (selection?.frozen) return;
+
+    const snapshot = captureSelectionSnapshot();
+    if (snapshot) {
+      setSelection({ ...snapshot, frozen: false });
+    } else {
+      setSelection(null);
+    }
+  }, [captureSelectionSnapshot, selection?.frozen]);
 
   // Listen for selectionchange events when highlight mode is on
   useEffect(() => {
@@ -168,8 +180,25 @@ export function TranscriptView({
       requestAnimationFrame(processSelection);
     };
 
+    // Reset frozen state when selection is cleared by user
+    const handleMouseUp = () => {
+      setTimeout(() => {
+        const windowSelection = window.getSelection();
+        if (!windowSelection || windowSelection.isCollapsed) {
+          setSelection(null);
+        }
+      }, 50);
+    };
+
     document.addEventListener('selectionchange', handleSelectionChange);
-    return () => document.removeEventListener('selectionchange', handleSelectionChange);
+    document.addEventListener('mouseup', handleMouseUp);
+    document.addEventListener('touchend', handleMouseUp);
+    
+    return () => {
+      document.removeEventListener('selectionchange', handleSelectionChange);
+      document.removeEventListener('mouseup', handleMouseUp);
+      document.removeEventListener('touchend', handleMouseUp);
+    };
   }, [highlightMode, processSelection]);
 
   // Clear selection helper
@@ -178,30 +207,42 @@ export function TranscriptView({
     window.getSelection()?.removeAllRanges();
   };
 
-  // Handle reminder button tap
+  // Handle reminder button tap - freeze selection FIRST to prevent scroll loss
   const handleReminderTap = () => {
-    if (selection && highlightMode) {
-      // With selection: open sheet prefilled
-      onOpenReminderSheet(selection.text, selection.startSeconds, selection.endSeconds);
-      clearSelection();
-    } else {
-      // No selection: open empty sheet (manual entry)
-      const timestamp = getCurrentTime?.() ?? 0;
-      onOpenReminderSheet('', timestamp);
+    if (highlightMode) {
+      // Capture fresh snapshot immediately to freeze current selection state
+      const frozenSnapshot = captureSelectionSnapshot();
+      const selectionToUse = frozenSnapshot || selection;
+      
+      if (selectionToUse) {
+        // Use frozen snapshot data to prevent any loss during UI transition
+        onOpenReminderSheet(selectionToUse.text, selectionToUse.startSeconds, selectionToUse.endSeconds);
+        clearSelection();
+        return;
+      }
     }
+    // No selection: open empty sheet (manual entry)
+    const timestamp = getCurrentTime?.() ?? 0;
+    onOpenReminderSheet('', timestamp);
   };
 
-  // Handle todo button tap
+  // Handle todo button tap - freeze selection FIRST to prevent scroll loss
   const handleTodoTap = () => {
-    if (selection && highlightMode) {
-      // With selection: open sheet prefilled
-      onOpenTodoSheet(selection.text, selection.startSeconds, selection.endSeconds);
-      clearSelection();
-    } else {
-      // No selection: open empty sheet (manual entry)
-      const timestamp = getCurrentTime?.() ?? 0;
-      onOpenTodoSheet('', timestamp);
+    if (highlightMode) {
+      // Capture fresh snapshot immediately to freeze current selection state
+      const frozenSnapshot = captureSelectionSnapshot();
+      const selectionToUse = frozenSnapshot || selection;
+      
+      if (selectionToUse) {
+        // Use frozen snapshot data to prevent any loss during UI transition
+        onOpenTodoSheet(selectionToUse.text, selectionToUse.startSeconds, selectionToUse.endSeconds);
+        clearSelection();
+        return;
+      }
     }
+    // No selection: open empty sheet (manual entry)
+    const timestamp = getCurrentTime?.() ?? 0;
+    onOpenTodoSheet('', timestamp);
   };
 
   // Handle plus button click on segment
