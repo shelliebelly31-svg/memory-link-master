@@ -68,12 +68,14 @@ export function useCreateManualReminder() {
       notes?: string;
       video_id?: string;
       timestamp_seconds?: number;
+      end_timestamp_seconds?: number;
       schedule_at?: Date;
       repeat_type?: RepeatType;
       repeat_days?: number[];
       repeat_dates?: Date[];
     }) => {
       const timestampSeconds = data.timestamp_seconds ?? 0;
+      const endTimestampSeconds = data.end_timestamp_seconds ?? timestampSeconds + 1;
 
       // 1. Create highlight record
       const { data: highlight, error: highlightError } = await supabase
@@ -83,7 +85,7 @@ export function useCreateManualReminder() {
           user_id: user!.id,
           type: 'remember' as const,
           start_seconds: timestampSeconds,
-          end_seconds: timestampSeconds + 1,
+          end_seconds: endTimestampSeconds,
           selected_text: data.title,
         })
         .select()
@@ -183,9 +185,11 @@ export function useCreateManualTask() {
       description?: string;
       video_id?: string;
       timestamp_seconds?: number;
+      end_timestamp_seconds?: number;
       due_date?: string;
     }) => {
       const timestampSeconds = data.timestamp_seconds ?? 0;
+      const endTimestampSeconds = data.end_timestamp_seconds ?? timestampSeconds + 1;
       let highlightId: string | null = null;
 
       // 1. Create highlight record only if video is provided
@@ -197,7 +201,7 @@ export function useCreateManualTask() {
             user_id: user!.id,
             type: 'todo' as const,
             start_seconds: timestampSeconds,
-            end_seconds: timestampSeconds + 1,
+            end_seconds: endTimestampSeconds,
             selected_text: data.title,
           })
           .select()
