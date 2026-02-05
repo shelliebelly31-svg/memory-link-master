@@ -52,17 +52,13 @@ export function QuickAddSheet({
         </DrawerHeader>
 
         <div className="p-4 space-y-4">
-          {/* Preview with word markers */}
+          {/* Preview with colored text markers */}
           <div className="bg-muted/50 p-3 rounded-lg border border-border">
-            <div className="flex items-center gap-2 text-sm">
-              <span className="inline-flex items-center gap-1">
-                <span className="w-2 h-2 rounded-full bg-remember shrink-0"></span>
-                <span className="text-muted-foreground font-medium">{markers.first}</span>
-              </span>
-              <span className="text-muted-foreground/50">...</span>
-              <span className="inline-flex items-center gap-1">
-                <span className="text-muted-foreground font-medium">{markers.last}</span>
-                <span className="w-2 h-2 rounded-full bg-remember shrink-0"></span>
+            <div className="flex items-center gap-2 text-sm flex-wrap">
+              <span className="font-medium">
+                <span className="text-remember">{markers.first}</span>
+                <span className="text-muted-foreground/50"> ... </span>
+                <span className="text-todo">{markers.last}</span>
               </span>
             </div>
             <p className="text-xs text-muted-foreground/70 mt-2 line-clamp-2">
