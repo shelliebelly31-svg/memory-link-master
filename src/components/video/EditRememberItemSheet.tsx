@@ -127,7 +127,7 @@ export function EditRememberItemSheet({
   const handleSave = () => {
     if (!item || !summary.trim()) return;
     onSave(item.id, { summary: summary.trim(), key_points: keyPoints });
-    toast({ title: 'Saved', description: 'Memory item updated successfully' });
+    // Toast is handled by the parent mutation callback
   };
 
   const formatTimestamp = (seconds: number): string => {

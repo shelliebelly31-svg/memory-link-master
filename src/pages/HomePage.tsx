@@ -1,16 +1,18 @@
-import { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Brain, Trophy, CheckSquare, Shuffle, ChevronRight, Clock, Play, Loader2, Plus } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAllRememberItems, useAllTasks, useAllQuizItems, useAllRemindersCombined, RememberItemWithVideo, TaskWithVideo, CombinedReminder, useSoftDeleteReminder, useUndoDeleteReminder } from '@/hooks/useHomeData';
+import { useAllTasks, useAllQuizItems, useAllRemindersCombined, CombinedReminder, useSoftDeleteReminder, useUndoDeleteReminder } from '@/hooks/useHomeData';
 import { ReminderCard } from '@/components/home/ReminderCard';
 import { CombinedTasksSheet } from '@/components/home/CombinedTasksSheet';
 import { DailyQuizSheet } from '@/components/home/DailyQuizSheet';
 import { AddReminderDialog } from '@/components/manual/AddReminderDialog';
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
+import { EditRememberItemSheet } from '@/components/video/EditRememberItemSheet';
+import { useUpdateRememberItem } from '@/hooks/useItemMutations';
 import { toast } from 'sonner';
 
 interface HomePageProps {
@@ -47,6 +49,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const [selectedVideos, setSelectedVideos] = useState<string[]>([]);
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
+  const [editReminder, setEditReminder] = useState<CombinedReminder | null>(null);
   
   // Delete undo state
   const [pendingDeletes, setPendingDeletes] = useState<Map<string, { reminder: CombinedReminder; index: number; timeoutId: NodeJS.Timeout }>>(new Map());
@@ -57,6 +60,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
   
   const softDeleteMutation = useSoftDeleteReminder();
   const undoDeleteMutation = useUndoDeleteReminder();
+  const updateRememberMutation = useUpdateRememberItem();
 
   // Shuffle reminders for display
   const shuffledReminders = useMemo(() => {
@@ -247,6 +251,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
                       index={index}
                       onOpenVideo={() => handleOpenVideo(reminder.video_id, reminder.timestamp_seconds)}
                       onDelete={() => handleDeleteReminder(reminder, index)}
+                      onEdit={!reminder.is_manual ? () => setEditReminder(reminder) : undefined}
                     />
                   ))}
 
@@ -393,6 +398,27 @@ export default function HomePage({ onLogout }: HomePageProps) {
       <AddTodoDialog
         open={addTodoOpen}
         onOpenChange={setAddTodoOpen}
+      />
+
+      {/* Edit Reminder Sheet */}
+      <EditRememberItemSheet
+        open={!!editReminder}
+        onOpenChange={(open) => !open && setEditReminder(null)}
+        item={editReminder ? {
+          id: editReminder.id,
+          summary: editReminder.summary,
+          key_points: editReminder.key_points,
+          timestamp_seconds: editReminder.timestamp_seconds,
+          video_id: editReminder.video_id || undefined,
+        } : null}
+        onSave={(id, data) => {
+          updateRememberMutation.mutate(
+            { id, ...data },
+            { onSuccess: () => setEditReminder(null) }
+          );
+        }}
+        isSaving={updateRememberMutation.isPending}
+        videoTitle={editReminder?.video_title}
       />
     </PageLayout>
   );

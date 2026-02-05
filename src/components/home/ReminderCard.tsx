@@ -1,4 +1,4 @@
-import { Play, Trash2 } from 'lucide-react';
+import { Play, Trash2, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -9,6 +9,7 @@ interface ReminderCardProps {
   index: number;
   onOpenVideo: () => void;
   onDelete: () => void;
+  onEdit?: () => void;
 }
 
 function formatTimestamp(seconds: number): string {
@@ -17,27 +18,42 @@ function formatTimestamp(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-export function ReminderCard({ reminder, index, onOpenVideo, onDelete }: ReminderCardProps) {
+export function ReminderCard({ reminder, index, onOpenVideo, onDelete, onEdit }: ReminderCardProps) {
   return (
     <Card 
       className="card-elevated animate-fade-up"
       style={{ animationDelay: `${index * 50}ms` }}
     >
       <CardContent className="p-4 space-y-3">
-        {/* Header with delete */}
+        {/* Header with edit and delete */}
         <div className="flex items-start justify-between gap-2">
           <p className="font-medium leading-relaxed flex-1">{reminder.summary}</p>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDelete();
-            }}
-          >
-            <Trash2 className="h-4 w-4" />
-          </Button>
+          <div className="flex items-center gap-1 shrink-0">
+            {onEdit && (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onEdit();
+                }}
+              >
+                <Pencil className="h-4 w-4" />
+              </Button>
+            )}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete();
+              }}
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
         </div>
         
         {/* Key points */}
