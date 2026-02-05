@@ -265,7 +265,7 @@ export function TranscriptView({
     onOpenTodoSheet(quickAdd.segmentText, quickAdd.segmentStart, quickAdd.segmentEnd);
   };
 
-  // Render text with existing highlights marked
+  // Render text with existing highlights marked - color the text itself
   const renderHighlightedText = (segment: TranscriptSegment) => {
     const segmentHighlights = getSegmentHighlights(segment);
     
@@ -273,22 +273,17 @@ export function TranscriptView({
       return <span>{segment.text}</span>;
     }
 
-    // Show visual indicators for highlighted segments
+    // Determine text color based on highlight type (reminder takes precedence)
     const highlightTypes = [...new Set(segmentHighlights.map(h => h.type))];
+    const hasRemember = highlightTypes.includes('remember');
+    const hasTodo = highlightTypes.includes('todo');
+    
+    // Apply text color based on highlight type
+    const textColorClass = hasRemember ? 'text-remember' : hasTodo ? 'text-todo' : '';
     
     return (
-      <span className="relative">
+      <span className={textColorClass}>
         {segment.text}
-        {highlightTypes.length > 0 && (
-          <span className="ml-2 inline-flex gap-1">
-            {highlightTypes.includes('remember') && (
-              <span className="inline-block w-2 h-2 rounded-full bg-remember" title="Remember highlight" />
-            )}
-            {highlightTypes.includes('todo') && (
-              <span className="inline-block w-2 h-2 rounded-full bg-todo" title="To Do highlight" />
-            )}
-          </span>
-        )}
       </span>
     );
   };
