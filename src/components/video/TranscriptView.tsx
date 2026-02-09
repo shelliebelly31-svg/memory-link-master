@@ -265,7 +265,7 @@ export function TranscriptView({
     onOpenTodoSheet(quickAdd.segmentText, quickAdd.segmentStart, quickAdd.segmentEnd);
   };
 
-  // Render text with existing highlights marked - color the text itself
+  // Render text with existing highlights marked - color only the matched text
   const renderHighlightedText = (segment: TranscriptSegment) => {
     const segmentHighlights = getSegmentHighlights(segment);
     
@@ -273,17 +273,99 @@ export function TranscriptView({
       return <span>{segment.text}</span>;
     }
 
-    // Determine text color based on highlight type (reminder takes precedence)
-    const highlightTypes = [...new Set(segmentHighlights.map(h => h.type))];
-    const hasRemember = highlightTypes.includes('remember');
-    const hasTodo = highlightTypes.includes('todo');
+    const text = segment.text;
+    // Track color per character
+    const charColors: (string | null)[] = new Array(text.length).fill(null);
+
+    for (const h of segmentHighlights) {
+      const colorClass = h.type === 'remember' ? 'text-remember' : h.type === 'todo' ? 'text-todo' : null;
+      if (!colorClass || !h.selected_text) continue;
+
+      const selectedLower = h.selected_text.toLowerCase();
+      const segLower = text.toLowerCase();
+
+      // Case 1: selected_text contains this segment's text (selection spans beyond this segment)
+      if (selectedLower.includes(segLower.trim())) {
+        for (let i = 0; i < text.length; i++) {
+          if (charColors[i] === null || colorClass === 'text-remember') charColors[i] = colorClass;
+        }
+        continue;
+      }
+
+      // Case 2: this segment contains part of the selected_text — find the overlapping words
+      // Try direct substring match first
+      const directIdx = segLower.indexOf(selectedLower);
+      if (directIdx >= 0) {
+        for (let i = directIdx; i < directIdx + h.selected_text.length; i++) {
+          if (charColors[i] === null || colorClass === 'text-remember') charColors[i] = colorClass;
+        }
+        continue;
+      }
+
+      // Case 3: Partial overlap — segment has the tail or head of selected text
+      // Find longest matching suffix of selected_text at the start of segment
+      // or longest matching prefix of selected_text at the end of segment
+      const selectedWords = h.selected_text.split(/\s+/).filter(w => w.length > 0);
+      const segWords = text.split(/\s+/).filter(w => w.length > 0);
+
+      // Check if segment starts with the tail of selected text
+      for (let take = Math.min(segWords.length, selectedWords.length); take >= 1; take--) {
+        const segSlice = segWords.slice(0, take).join(' ').toLowerCase();
+        const selTail = selectedWords.slice(-take).join(' ').toLowerCase();
+        if (segSlice === selTail) {
+          // Color from start of segment for these words
+          const matchEnd = text.indexOf(segWords[take - 1]) + segWords[take - 1].length;
+          for (let i = 0; i <= matchEnd && i < text.length; i++) {
+            if (charColors[i] === null || colorClass === 'text-remember') charColors[i] = colorClass;
+          }
+          break;
+        }
+      }
+
+      // Check if segment ends with the head of selected text
+      for (let take = Math.min(segWords.length, selectedWords.length); take >= 1; take--) {
+        const segSlice = segWords.slice(-take).join(' ').toLowerCase();
+        const selHead = selectedWords.slice(0, take).join(' ').toLowerCase();
+        if (segSlice === selHead) {
+          // Color from the matched word to end of segment
+          const firstMatchWord = segWords[segWords.length - take];
+          const matchStart = text.lastIndexOf(firstMatchWord);
+          if (matchStart >= 0) {
+            for (let i = matchStart; i < text.length; i++) {
+              if (charColors[i] === null || colorClass === 'text-remember') charColors[i] = colorClass;
+            }
+          }
+          break;
+        }
+      }
+    }
+
+    // If no characters were colored, return plain text
+    if (charColors.every(c => c === null)) {
+      return <span>{text}</span>;
+    }
+
+    // Build spans from consecutive same-color chars
+    const spans: { text: string; color: string | null }[] = [];
+    let currentColor = charColors[0];
+    let currentText = text[0] || '';
     
-    // Apply text color based on highlight type
-    const textColorClass = hasRemember ? 'text-remember' : hasTodo ? 'text-todo' : '';
-    
+    for (let i = 1; i < text.length; i++) {
+      if (charColors[i] === currentColor) {
+        currentText += text[i];
+      } else {
+        spans.push({ text: currentText, color: currentColor });
+        currentColor = charColors[i];
+        currentText = text[i];
+      }
+    }
+    if (currentText) spans.push({ text: currentText, color: currentColor });
+
     return (
-      <span className={textColorClass}>
-        {segment.text}
+      <span>
+        {spans.map((s, i) => 
+          s.color ? <span key={i} className={s.color}>{s.text}</span> : <span key={i}>{s.text}</span>
+        )}
       </span>
     );
   };
