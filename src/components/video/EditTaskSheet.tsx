@@ -310,36 +310,41 @@ export function EditTaskSheet({
   };
 
   const handleCopySelected = async () => {
-    const text = getSelectedText();
-    if (!text) {
+    const selected = worksheetSections.filter(s => s.selected && (s.clarified || s.answer));
+    if (selected.length === 0) {
       toast({ title: 'Nothing to copy', description: 'Select sections with content first.', variant: 'destructive' });
       return;
     }
-    // Copy plain text version
-    const plain = worksheetSections
-      .filter(s => s.selected && (s.clarified || s.answer))
-      .map(s => `${s.label}\n${s.clarified || s.answer}`)
-      .join('\n\n');
-    await navigator.clipboard.writeText(plain);
-    toast({ title: 'Copied!', description: 'Selected sections copied to clipboard.' });
+    const plain = selected.map(s => `${s.label}\n${s.clarified || s.answer}`).join('\n\n');
+    try {
+      await navigator.clipboard.writeText(plain);
+      toast({ title: 'Copied!', description: 'Selected sections copied to clipboard.' });
+    } catch (err) {
+      console.error('Copy failed:', err);
+      toast({ title: 'Copy failed', description: 'Could not copy to clipboard.', variant: 'destructive' });
+    }
   };
 
   const handleShareSelected = async () => {
-    const plain = worksheetSections
-      .filter(s => s.selected && (s.clarified || s.answer))
-      .map(s => `${s.label}\n${s.clarified || s.answer}`)
-      .join('\n\n');
-    if (!plain) {
+    const selected = worksheetSections.filter(s => s.selected && (s.clarified || s.answer));
+    if (selected.length === 0) {
       toast({ title: 'Nothing to share', description: 'Select sections with content first.', variant: 'destructive' });
       return;
     }
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: title, text: plain });
-      } catch { /* user cancelled */ }
-    } else {
-      await navigator.clipboard.writeText(plain);
-      toast({ title: 'Copied!', description: 'Share not supported, copied to clipboard instead.' });
+    const plain = selected.map(s => `${s.label}\n${s.clarified || s.answer}`).join('\n\n');
+    try {
+      if (navigator.share) {
+        await navigator.share({ title: title || 'Worksheet', text: plain });
+      } else {
+        await navigator.clipboard.writeText(plain);
+        toast({ title: 'Copied!', description: 'Share not supported, copied to clipboard instead.' });
+      }
+    } catch (err) {
+      // User cancelled share or it failed
+      if (err instanceof Error && err.name !== 'AbortError') {
+        console.error('Share failed:', err);
+        toast({ title: 'Share failed', description: 'Could not share content.', variant: 'destructive' });
+      }
     }
   };
 
@@ -473,9 +478,15 @@ export function EditTaskSheet({
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs gap-1"
-                              onClick={async () => {
-                                await navigator.clipboard.writeText(section.clarified || section.answer);
-                                toast({ title: 'Copied!', description: `${section.label} copied.` });
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                try {
+                                  await navigator.clipboard.writeText(section.clarified || section.answer);
+                                  toast({ title: 'Copied!', description: `${section.label} copied.` });
+                                } catch (err) {
+                                  console.error('Copy failed:', err);
+                                  toast({ title: 'Copy failed', variant: 'destructive' });
+                                }
                               }}
                             >
                               <Copy className="h-3 w-3" />
@@ -485,14 +496,21 @@ export function EditTaskSheet({
                               variant="ghost"
                               size="sm"
                               className="h-7 text-xs gap-1"
-                              onClick={async () => {
-                                if (navigator.share) {
-                                  try {
-                                    await navigator.share({ title: section.label, text: section.clarified || section.answer });
-                                  } catch { /* cancelled */ }
-                                } else {
-                                  await navigator.clipboard.writeText(section.clarified || section.answer);
-                                  toast({ title: 'Copied!', description: 'Share not supported, copied instead.' });
+                              onClick={async (e) => {
+                                e.stopPropagation();
+                                const text = section.clarified || section.answer;
+                                try {
+                                  if (navigator.share) {
+                                    await navigator.share({ title: section.label, text });
+                                  } else {
+                                    await navigator.clipboard.writeText(text);
+                                    toast({ title: 'Copied!', description: 'Share not supported, copied instead.' });
+                                  }
+                                } catch (err) {
+                                  if (err instanceof Error && err.name !== 'AbortError') {
+                                    console.error('Share failed:', err);
+                                    toast({ title: 'Share failed', variant: 'destructive' });
+                                  }
                                 }
                               }}
                             >
