@@ -11,7 +11,7 @@ serve(async (req) => {
   }
 
   try {
-    const { summary, existing_key_points, video_title, timestamp } = await req.json();
+    const { summary, existing_key_points, video_title, timestamp, type } = await req.json();
     
     if (!summary) {
       return new Response(
@@ -29,14 +29,32 @@ serve(async (req) => {
       ? `\nExisting key points (avoid duplicating these):\n${existing_key_points.map((p: string) => `- ${p}`).join('\n')}`
       : '';
 
-    const prompt = `Given the following memory item from a video:
-
-Summary: "${summary}"
-${video_title ? `Video Title: "${video_title}"` : ''}
-${timestamp ? `Timestamp: ${timestamp}` : ''}
-${existingPointsText}
-
-Generate:
+    // Build prompt based on type
+    const generateType = type || 'both'; // 'key_points', 'todos', or 'both'
+    
+    let instructionBlock = '';
+    let formatBlock = '';
+    
+    if (generateType === 'key_points') {
+      instructionBlock = `Generate 3-6 key points that capture important insights from this content. Each should be:
+- Short, punchy, and actionable
+- Specific and clear
+- Different from existing key points`;
+      formatBlock = `Return ONLY a valid JSON object in this exact format, no explanation:
+{
+  "keyPoints": ["Point 1", "Point 2", "Point 3"]
+}`;
+    } else if (generateType === 'todos') {
+      instructionBlock = `Generate 3-6 to-do suggestions - specific next steps a user could take in real life based on this content. Each should be:
+- Actionable and concrete
+- Something the user can actually do
+- Relevant to the content`;
+      formatBlock = `Return ONLY a valid JSON object in this exact format, no explanation:
+{
+  "todos": ["Do this first", "Then do this", "Finally do this"]
+}`;
+    } else {
+      instructionBlock = `Generate:
 1. 3-6 additional key points that capture important insights from this content. Each should be:
    - Short, punchy, and actionable
    - Specific and clear
@@ -45,15 +63,26 @@ Generate:
 2. 3-6 to-do suggestions - specific next steps a user could take in real life based on this content. Each should be:
    - Actionable and concrete
    - Something the user can actually do
-   - Relevant to the content
-
-Return ONLY a valid JSON object in this exact format, no explanation:
+   - Relevant to the content`;
+      formatBlock = `Return ONLY a valid JSON object in this exact format, no explanation:
 {
   "keyPoints": ["Point 1", "Point 2", "Point 3"],
   "todos": ["Do this first", "Then do this", "Finally do this"]
 }`;
+    }
 
-    console.log("Generating memory suggestions for:", { summary: summary.slice(0, 50), video_title });
+    const prompt = `Given the following memory item from a video:
+
+Summary: "${summary}"
+${video_title ? `Video Title: "${video_title}"` : ''}
+${timestamp ? `Timestamp: ${timestamp}` : ''}
+${existingPointsText}
+
+${instructionBlock}
+
+${formatBlock}`;
+
+    console.log("Generating memory suggestions for:", { summary: summary.slice(0, 50), video_title, type: generateType });
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -96,7 +125,6 @@ Return ONLY a valid JSON object in this exact format, no explanation:
     // Parse the JSON response
     let result = { keyPoints: [] as string[], todos: [] as string[] };
     try {
-      // Try to extract JSON from the response
       const jsonMatch = content.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
@@ -105,26 +133,27 @@ Return ONLY a valid JSON object in this exact format, no explanation:
       }
     } catch (parseError) {
       console.error("Error parsing AI response:", parseError);
-      // Provide fallback suggestions
-      result = {
-        keyPoints: [
+      if (generateType === 'key_points' || generateType === 'both') {
+        result.keyPoints = [
           "Review and reinforce this concept regularly",
           "Connect this to related topics you know",
           "Practice applying this knowledge"
-        ],
-        todos: [
+        ];
+      }
+      if (generateType === 'todos' || generateType === 'both') {
+        result.todos = [
           "Research more about this topic",
           "Take notes on practical applications",
           "Schedule a review session"
-        ]
-      };
+        ];
+      }
     }
 
-    // Ensure we have at least some suggestions
-    if (result.keyPoints.length === 0) {
+    // Ensure we have at least some suggestions for the requested type
+    if ((generateType === 'key_points' || generateType === 'both') && result.keyPoints.length === 0) {
       result.keyPoints = ["Key takeaway from this content", "Important insight to remember"];
     }
-    if (result.todos.length === 0) {
+    if ((generateType === 'todos' || generateType === 'both') && result.todos.length === 0) {
       result.todos = ["Review this material again", "Apply this knowledge in practice"];
     }
 
