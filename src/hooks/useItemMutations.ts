@@ -109,7 +109,17 @@ export function useUpdateTask() {
       checklist_items?: ChecklistItem[];
       worksheet_sections?: unknown[] | null;
     }) => {
-      const updateData: Record<string, unknown> = { title, description, due_date };
+      // Get the minimum order_index to place this task at the top
+      const { data: topTask } = await supabase
+        .from('tasks')
+        .select('order_index')
+        .order('order_index', { ascending: true })
+        .limit(1)
+        .single();
+      
+      const newOrderIndex = topTask ? topTask.order_index - 1 : 0;
+
+      const updateData: Record<string, unknown> = { title, description, due_date, order_index: newOrderIndex };
       if (checklist_items !== undefined) {
         updateData.checklist_items = checklist_items as unknown as Json;
       }
@@ -119,7 +129,7 @@ export function useUpdateTask() {
       
       const { error } = await supabase
         .from('tasks')
-        .update(updateData as { title: string; description: string | null; due_date: string | null; checklist_items?: Json })
+        .update(updateData as { title: string; description: string | null; due_date: string | null; checklist_items?: Json; order_index: number })
         .eq('id', id);
 
       if (error) throw error;
