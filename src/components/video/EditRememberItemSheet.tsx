@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Brain, Loader2, X, Sparkles, Plus, Check, Maximize2, Minimize2 } from 'lucide-react';
+import { Brain, Loader2, X, Sparkles, Plus, Check, Maximize2, Minimize2, ListTodo } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -32,11 +32,6 @@ interface EditRememberItemSheetProps {
   autoGenerateSuggestions?: boolean;
 }
 
-interface AISuggestions {
-  keyPoints: string[];
-  todos: string[];
-}
-
 export function EditRememberItemSheet({
   open,
   onOpenChange,
@@ -49,8 +44,15 @@ export function EditRememberItemSheet({
   const [summary, setSummary] = useState('');
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
   const [newKeyPoint, setNewKeyPoint] = useState('');
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [suggestions, setSuggestions] = useState<AISuggestions | null>(null);
+  
+  // Separate generating states
+  const [isGeneratingKeyPoints, setIsGeneratingKeyPoints] = useState(false);
+  const [isGeneratingTodos, setIsGeneratingTodos] = useState(false);
+  
+  // Separate suggestion states
+  const [keyPointSuggestions, setKeyPointSuggestions] = useState<string[] | null>(null);
+  const [todoSuggestions, setTodoSuggestions] = useState<string[] | null>(null);
+  
   const [selectedKeyPoints, setSelectedKeyPoints] = useState<Set<number>>(new Set());
   const [selectedTodos, setSelectedTodos] = useState<Set<number>>(new Set());
   const [isFullScreen, setIsFullScreen] = useState(false);
@@ -60,7 +62,6 @@ export function EditRememberItemSheet({
   const createTaskMutation = useCreateManualTask();
   const summaryRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
-
   const autoTriggeredRef = useRef(false);
 
   useEffect(() => {
@@ -68,7 +69,8 @@ export function EditRememberItemSheet({
       setSummary(item.summary);
       setKeyPoints(item.key_points || []);
       setNewKeyPoint('');
-      setSuggestions(null);
+      setKeyPointSuggestions(null);
+      setTodoSuggestions(null);
       setSelectedKeyPoints(new Set());
       setSelectedTodos(new Set());
       setIsFullScreen(false);
@@ -76,42 +78,35 @@ export function EditRememberItemSheet({
     }
   }, [item, open]);
 
-  // Auto-trigger AI suggestions when opened from home page
+  // Auto-trigger when opened from home page
   useEffect(() => {
-    if (open && autoGenerateSuggestions && item && summary.trim() && !autoTriggeredRef.current && !suggestions && !isGenerating) {
+    if (open && autoGenerateSuggestions && item && summary.trim() && !autoTriggeredRef.current && !keyPointSuggestions && !todoSuggestions && !isGeneratingKeyPoints && !isGeneratingTodos) {
       autoTriggeredRef.current = true;
-      handleGenerateSuggestions();
+      // Auto-generate both
+      handleGenerateKeyPoints();
+      handleGenerateTodos();
     }
   }, [open, autoGenerateSuggestions, item, summary]);
 
-  // Handle keyboard visibility using visualViewport API
+  // Handle keyboard visibility
   useEffect(() => {
     if (!open) return;
-
     const viewport = window.visualViewport;
     if (!viewport) return;
-
     const handleResize = () => {
-      // Calculate keyboard height from viewport difference
       const windowHeight = window.innerHeight;
       const viewportHeight = viewport.height;
-      const newKeyboardHeight = Math.max(0, windowHeight - viewportHeight);
-      setKeyboardHeight(newKeyboardHeight);
+      setKeyboardHeight(Math.max(0, windowHeight - viewportHeight));
     };
-
     viewport.addEventListener('resize', handleResize);
     viewport.addEventListener('scroll', handleResize);
-    
-    // Initial check
     handleResize();
-
     return () => {
       viewport.removeEventListener('resize', handleResize);
       viewport.removeEventListener('scroll', handleResize);
     };
   }, [open]);
 
-  // Scroll to focused element when keyboard opens
   useEffect(() => {
     const handleFocus = (e: FocusEvent) => {
       const target = e.target as HTMLElement;
@@ -121,7 +116,6 @@ export function EditRememberItemSheet({
         }, 300);
       }
     };
-
     document.addEventListener('focusin', handleFocus);
     return () => document.removeEventListener('focusin', handleFocus);
   }, []);
@@ -140,7 +134,6 @@ export function EditRememberItemSheet({
   const handleSave = () => {
     if (!item || !summary.trim()) return;
     onSave(item.id, { summary: summary.trim(), key_points: keyPoints });
-    // Toast is handled by the parent mutation callback
   };
 
   const formatTimestamp = (seconds: number): string => {
@@ -153,15 +146,49 @@ export function EditRememberItemSheet({
     return text.toLowerCase().trim().replace(/[^\w\s]/g, '');
   };
 
-  const handleGenerateSuggestions = async () => {
+  const handleGenerateKeyPoints = async () => {
     if (!summary.trim()) {
       toast({ title: 'Error', description: 'Summary is required to generate suggestions', variant: 'destructive' });
       return;
     }
 
-    setIsGenerating(true);
-    setSuggestions(null);
+    setIsGeneratingKeyPoints(true);
+    setKeyPointSuggestions(null);
     setSelectedKeyPoints(new Set());
+
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-memory-suggestions', {
+        body: {
+          summary,
+          existing_key_points: keyPoints,
+          video_title: videoTitle,
+          timestamp: item ? formatTimestamp(item.timestamp_seconds) : undefined,
+          type: 'key_points',
+        },
+      });
+
+      if (error) throw error;
+      setKeyPointSuggestions(data.keyPoints || []);
+    } catch (error) {
+      console.error('Error generating key point suggestions:', error);
+      toast({
+        title: 'Generation failed',
+        description: error instanceof Error ? error.message : 'Could not generate suggestions',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsGeneratingKeyPoints(false);
+    }
+  };
+
+  const handleGenerateTodos = async () => {
+    if (!summary.trim()) {
+      toast({ title: 'Error', description: 'Summary is required to generate suggestions', variant: 'destructive' });
+      return;
+    }
+
+    setIsGeneratingTodos(true);
+    setTodoSuggestions(null);
     setSelectedTodos(new Set());
 
     try {
@@ -171,53 +198,44 @@ export function EditRememberItemSheet({
           existing_key_points: keyPoints,
           video_title: videoTitle,
           timestamp: item ? formatTimestamp(item.timestamp_seconds) : undefined,
+          type: 'todos',
         },
       });
 
       if (error) throw error;
-
-      setSuggestions({
-        keyPoints: data.keyPoints || [],
-        todos: data.todos || [],
-      });
+      setTodoSuggestions(data.todos || []);
     } catch (error) {
-      console.error('Error generating suggestions:', error);
+      console.error('Error generating to-do suggestions:', error);
       toast({
         title: 'Generation failed',
         description: error instanceof Error ? error.message : 'Could not generate suggestions',
         variant: 'destructive',
       });
     } finally {
-      setIsGenerating(false);
+      setIsGeneratingTodos(false);
     }
   };
 
   const toggleKeyPointSelection = (index: number) => {
     const newSelected = new Set(selectedKeyPoints);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
-    }
+    if (newSelected.has(index)) newSelected.delete(index);
+    else newSelected.add(index);
     setSelectedKeyPoints(newSelected);
   };
 
   const toggleTodoSelection = (index: number) => {
     const newSelected = new Set(selectedTodos);
-    if (newSelected.has(index)) {
-      newSelected.delete(index);
-    } else {
-      newSelected.add(index);
-    }
+    if (newSelected.has(index)) newSelected.delete(index);
+    else newSelected.add(index);
     setSelectedTodos(newSelected);
   };
 
   const handleApplySelectedKeyPoints = () => {
-    if (!suggestions || selectedKeyPoints.size === 0) return;
+    if (!keyPointSuggestions || selectedKeyPoints.size === 0) return;
 
     const normalizedExisting = keyPoints.map(normalizeText);
     const newPoints = Array.from(selectedKeyPoints)
-      .map(i => suggestions.keyPoints[i])
+      .map(i => keyPointSuggestions[i])
       .filter(point => !normalizedExisting.includes(normalizeText(point)));
 
     if (newPoints.length > 0) {
@@ -231,9 +249,9 @@ export function EditRememberItemSheet({
   };
 
   const handleAddSelectedTodos = async () => {
-    if (!suggestions || selectedTodos.size === 0) return;
+    if (!todoSuggestions || selectedTodos.size === 0) return;
 
-    const todosToAdd = Array.from(selectedTodos).map(i => suggestions.todos[i]);
+    const todosToAdd = Array.from(selectedTodos).map(i => todoSuggestions[i]);
     let addedCount = 0;
 
     for (const todoTitle of todosToAdd) {
@@ -256,14 +274,7 @@ export function EditRememberItemSheet({
     setSelectedTodos(new Set());
   };
 
-  const handleDismissSuggestions = () => {
-    setSuggestions(null);
-    setSelectedKeyPoints(new Set());
-    setSelectedTodos(new Set());
-  };
-
   const handleContentClick = (e: React.MouseEvent) => {
-    // Dismiss keyboard when tapping outside inputs
     const target = e.target as HTMLElement;
     if (target.tagName !== 'TEXTAREA' && target.tagName !== 'INPUT' && !target.closest('button')) {
       (document.activeElement as HTMLElement)?.blur();
@@ -318,13 +329,11 @@ export function EditRememberItemSheet({
               value={summary}
               onChange={(e) => setSummary(e.target.value)}
               className="min-h-[180px] max-h-[300px] resize-none text-base leading-relaxed"
-              style={{ 
-                height: 'auto',
-                minHeight: '180px',
-              }}
+              style={{ height: 'auto', minHeight: '180px' }}
             />
           </div>
 
+          {/* Key Points Section */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
               <Label>Key Points</Label>
@@ -332,11 +341,11 @@ export function EditRememberItemSheet({
                 type="button"
                 variant="outline"
                 size="sm"
-                onClick={handleGenerateSuggestions}
-                disabled={isGenerating || !summary.trim()}
+                onClick={handleGenerateKeyPoints}
+                disabled={isGeneratingKeyPoints || !summary.trim()}
                 className="gap-1.5"
               >
-                {isGenerating ? (
+                {isGeneratingKeyPoints ? (
                   <>
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
                     Generating...
@@ -393,105 +402,140 @@ export function EditRememberItemSheet({
                 Add
               </Button>
             </div>
+
+            {/* Key Points Suggestions */}
+            {keyPointSuggestions && keyPointSuggestions.length > 0 && (
+              <div className="space-y-2 border border-border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                    <Sparkles className="h-3.5 w-3.5 text-primary" />
+                    AI Key Point Suggestions
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setKeyPointSuggestions(null); setSelectedKeyPoints(new Set()); }}
+                    className="h-7 text-xs"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                <div className="space-y-1.5">
+                  {keyPointSuggestions.map((point, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-2 text-sm p-2 rounded-lg bg-background hover:bg-muted/50 cursor-pointer"
+                      onClick={() => toggleKeyPointSelection(index)}
+                    >
+                      <Checkbox
+                        checked={selectedKeyPoints.has(index)}
+                        onCheckedChange={() => toggleKeyPointSelection(index)}
+                        className="mt-0.5"
+                      />
+                      <span className="flex-1">{point}</span>
+                    </div>
+                  ))}
+                </div>
+                {selectedKeyPoints.size > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleApplySelectedKeyPoints}
+                    className="w-full gap-1.5"
+                  >
+                    <Plus className="h-3.5 w-3.5" />
+                    Save selected key points ({selectedKeyPoints.size})
+                  </Button>
+                )}
+              </div>
+            )}
           </div>
 
-          {/* AI Suggestions Section */}
-          {suggestions && (
-            <div className="space-y-4 border border-border rounded-lg p-4 bg-muted/30">
-              <div className="flex items-center justify-between">
-                <h4 className="font-medium flex items-center gap-2">
-                  <Sparkles className="h-4 w-4 text-primary" />
-                  AI Suggestions
-                </h4>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleDismissSuggestions}
-                >
-                  Dismiss
-                </Button>
-              </div>
-
-              {/* Key Points Suggestions */}
-              {suggestions.keyPoints.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">Key Points Suggestions</Label>
-                  <div className="space-y-1.5">
-                    {suggestions.keyPoints.map((point, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start gap-2 text-sm p-2 rounded-lg bg-background hover:bg-muted/50 cursor-pointer"
-                        onClick={() => toggleKeyPointSelection(index)}
-                      >
-                        <Checkbox
-                          checked={selectedKeyPoints.has(index)}
-                          onCheckedChange={() => toggleKeyPointSelection(index)}
-                          className="mt-0.5"
-                        />
-                        <span className="flex-1">{point}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedKeyPoints.size > 0 && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleApplySelectedKeyPoints}
-                      className="w-full gap-1.5"
-                    >
-                      <Plus className="h-3.5 w-3.5" />
-                      Apply selected ({selectedKeyPoints.size})
-                    </Button>
-                  )}
-                </div>
-              )}
-
-              {/* To Do Suggestions */}
-              {suggestions.todos.length > 0 && (
-                <div className="space-y-2">
-                  <Label className="text-sm text-muted-foreground">To Do Suggestions</Label>
-                  <div className="space-y-1.5">
-                    {suggestions.todos.map((todo, index) => (
-                      <div
-                        key={index}
-                        className="flex items-start gap-2 text-sm p-2 rounded-lg bg-background hover:bg-muted/50 cursor-pointer"
-                        onClick={() => toggleTodoSelection(index)}
-                      >
-                        <Checkbox
-                          checked={selectedTodos.has(index)}
-                          onCheckedChange={() => toggleTodoSelection(index)}
-                          className="mt-0.5"
-                        />
-                        <span className="flex-1">{todo}</span>
-                      </div>
-                    ))}
-                  </div>
-                  {selectedTodos.size > 0 && (
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      onClick={handleAddSelectedTodos}
-                      disabled={createTaskMutation.isPending}
-                      className="w-full gap-1.5"
-                    >
-                      {createTaskMutation.isPending ? (
-                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                      ) : (
-                        <Check className="h-3.5 w-3.5" />
-                      )}
-                      Add to To Do ({selectedTodos.size})
-                    </Button>
-                  )}
-                </div>
-              )}
+          {/* To Do Section */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>To Do Suggestions</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={handleGenerateTodos}
+                disabled={isGeneratingTodos || !summary.trim()}
+                className="gap-1.5"
+              >
+                {isGeneratingTodos ? (
+                  <>
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    Generating...
+                  </>
+                ) : (
+                  <>
+                    <ListTodo className="h-3.5 w-3.5" />
+                    Generate to-do
+                  </>
+                )}
+              </Button>
             </div>
-          )}
+
+            {/* To Do Suggestions */}
+            {todoSuggestions && todoSuggestions.length > 0 && (
+              <div className="space-y-2 border border-border rounded-lg p-3 bg-muted/30">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground flex items-center gap-1.5">
+                    <ListTodo className="h-3.5 w-3.5 text-primary" />
+                    AI To Do Suggestions
+                  </Label>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { setTodoSuggestions(null); setSelectedTodos(new Set()); }}
+                    className="h-7 text-xs"
+                  >
+                    Dismiss
+                  </Button>
+                </div>
+                <div className="space-y-1.5">
+                  {todoSuggestions.map((todo, index) => (
+                    <div
+                      key={index}
+                      className="flex items-start gap-2 text-sm p-2 rounded-lg bg-background hover:bg-muted/50 cursor-pointer"
+                      onClick={() => toggleTodoSelection(index)}
+                    >
+                      <Checkbox
+                        checked={selectedTodos.has(index)}
+                        onCheckedChange={() => toggleTodoSelection(index)}
+                        className="mt-0.5"
+                      />
+                      <span className="flex-1">{todo}</span>
+                    </div>
+                  ))}
+                </div>
+                {selectedTodos.size > 0 && (
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    onClick={handleAddSelectedTodos}
+                    disabled={createTaskMutation.isPending}
+                    className="w-full gap-1.5"
+                  >
+                    {createTaskMutation.isPending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <Check className="h-3.5 w-3.5" />
+                    )}
+                    Save to To Do ({selectedTodos.size})
+                  </Button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
-        {/* Sticky Footer - positioned above keyboard */}
+        {/* Sticky Footer */}
         <div 
           className="fixed left-0 right-0 border-t border-border bg-background p-4 flex gap-2 z-50 transition-all duration-150"
           style={{ 
