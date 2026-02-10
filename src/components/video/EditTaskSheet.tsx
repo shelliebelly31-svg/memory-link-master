@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { CheckSquare, Loader2, Plus, Trash2, Check } from 'lucide-react';
+import { CheckSquare, Loader2, Plus, Trash2, Sparkles, Copy, Share2, Check } from 'lucide-react';
 import {
   Drawer,
   DrawerContent,
@@ -14,6 +14,8 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { Checkbox } from '@/components/ui/checkbox';
 import { cn } from '@/lib/utils';
+import { useToast } from '@/hooks/use-toast';
+import { useAuth } from '@/hooks/useAuth';
 
 export interface ChecklistItem {
   id: string;
@@ -21,6 +23,15 @@ export interface ChecklistItem {
   completed: boolean;
   createdAt: string;
   updatedAt: string;
+}
+
+interface WorksheetSection {
+  label: string;
+  prompt: string;
+  answer: string;
+  clarified: string;
+  selected: boolean;
+  isClarifying: boolean;
 }
 
 interface EditTaskSheetProps {
@@ -57,14 +68,10 @@ function parseBulletsFromDescription(description: string): {
 
   for (const line of lines) {
     const trimmed = line.trim();
-    
-    // Check if we're entering a checklist section
     if (trimmed.toLowerCase().includes('checklist')) {
       inChecklistSection = true;
       continue;
     }
-    
-    // Check if line is a bullet point
     const bulletMatch = trimmed.match(/^[-•*]\s*(.+)$/);
     if (bulletMatch && inChecklistSection) {
       const text = bulletMatch[1].trim();
@@ -78,7 +85,6 @@ function parseBulletsFromDescription(description: string): {
         });
       }
     } else if (trimmed) {
-      // Reset checklist section if we hit non-bullet content
       if (inChecklistSection && !bulletMatch) {
         inChecklistSection = false;
       }
@@ -105,19 +111,27 @@ export function EditTaskSheet({
   const [dueDate, setDueDate] = useState('');
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [newItemText, setNewItemText] = useState('');
+  
+  // Worksheet state
+  const [worksheetSections, setWorksheetSections] = useState<WorksheetSection[]>([]);
+  const [isBreakingDown, setIsBreakingDown] = useState(false);
+  const [worksheetOpen, setWorksheetOpen] = useState(false);
+
+  const { toast } = useToast();
+  const { session } = useAuth();
 
   useEffect(() => {
     if (task && open) {
       setTitle(task.title);
       setDueDate(task.due_date || '');
       setNewItemText('');
+      setWorksheetSections([]);
+      setWorksheetOpen(false);
       
-      // Check if task already has checklist_items
       if (task.checklist_items && task.checklist_items.length > 0) {
         setChecklistItems(task.checklist_items);
         setDescription(task.description || '');
       } else if (task.description) {
-        // Try to migrate bullets from description
         const { checklistItems: parsed, cleanedDescription } = parseBulletsFromDescription(task.description);
         if (parsed.length > 0) {
           setChecklistItems(parsed);
@@ -145,7 +159,6 @@ export function EditTaskSheet({
 
   const handleAddItem = () => {
     if (!newItemText.trim()) return;
-    
     const newItem: ChecklistItem = {
       id: crypto.randomUUID(),
       text: newItemText.trim(),
@@ -153,7 +166,6 @@ export function EditTaskSheet({
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    
     setChecklistItems([...checklistItems, newItem]);
     setNewItemText('');
   };
@@ -172,8 +184,6 @@ export function EditTaskSheet({
         : item
     );
     setChecklistItems(updated);
-    
-    // Immediately persist toggle if callback provided
     if (onChecklistToggle && task) {
       onChecklistToggle(task.id, updated);
     }
@@ -191,6 +201,136 @@ export function EditTaskSheet({
     ));
   };
 
+  // === AI Worksheet functions ===
+
+  const handleBreakdown = async () => {
+    if (!title.trim()) return;
+    setIsBreakingDown(true);
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-clarify-task`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({ action: 'breakdown', task_title: title }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to break down task');
+      }
+      const data = await response.json();
+      setWorksheetSections(
+        data.sections.map((s: { label: string; prompt: string }) => ({
+          label: s.label,
+          prompt: s.prompt,
+          answer: '',
+          clarified: '',
+          selected: false,
+          isClarifying: false,
+        }))
+      );
+      setWorksheetOpen(true);
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed', variant: 'destructive' });
+    } finally {
+      setIsBreakingDown(false);
+    }
+  };
+
+  const handleClarifySection = async (index: number) => {
+    const section = worksheetSections[index];
+    if (!section.answer.trim()) {
+      toast({ title: 'Write something first', description: 'Fill in your answer before clarifying.', variant: 'destructive' });
+      return;
+    }
+
+    setWorksheetSections(prev => prev.map((s, i) => i === index ? { ...s, isClarifying: true } : s));
+
+    try {
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-clarify-task`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY}`,
+          },
+          body: JSON.stringify({
+            action: 'clarify',
+            task_title: title,
+            sections: { label: section.label, prompt: section.prompt, answer: section.answer },
+          }),
+        }
+      );
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || 'Failed to clarify');
+      }
+      const data = await response.json();
+      setWorksheetSections(prev => prev.map((s, i) => i === index ? { ...s, clarified: data.clarified, isClarifying: false } : s));
+    } catch (e) {
+      toast({ title: 'Error', description: e instanceof Error ? e.message : 'Failed', variant: 'destructive' });
+      setWorksheetSections(prev => prev.map((s, i) => i === index ? { ...s, isClarifying: false } : s));
+    }
+  };
+
+  const handleUseClarified = (index: number) => {
+    setWorksheetSections(prev => prev.map((s, i) => i === index ? { ...s, answer: s.clarified, clarified: '' } : s));
+  };
+
+  const handleToggleSection = (index: number) => {
+    setWorksheetSections(prev => prev.map((s, i) => i === index ? { ...s, selected: !s.selected } : s));
+  };
+
+  const handleSelectAll = () => {
+    const allSelected = worksheetSections.every(s => s.selected);
+    setWorksheetSections(prev => prev.map(s => ({ ...s, selected: !allSelected })));
+  };
+
+  const getSelectedText = () => {
+    const selected = worksheetSections.filter(s => s.selected && (s.clarified || s.answer));
+    if (selected.length === 0) return '';
+    return selected.map(s => `**${s.label}**\n${s.clarified || s.answer}`).join('\n\n');
+  };
+
+  const handleCopySelected = async () => {
+    const text = getSelectedText();
+    if (!text) {
+      toast({ title: 'Nothing to copy', description: 'Select sections with content first.', variant: 'destructive' });
+      return;
+    }
+    // Copy plain text version
+    const plain = worksheetSections
+      .filter(s => s.selected && (s.clarified || s.answer))
+      .map(s => `${s.label}\n${s.clarified || s.answer}`)
+      .join('\n\n');
+    await navigator.clipboard.writeText(plain);
+    toast({ title: 'Copied!', description: 'Selected sections copied to clipboard.' });
+  };
+
+  const handleShareSelected = async () => {
+    const plain = worksheetSections
+      .filter(s => s.selected && (s.clarified || s.answer))
+      .map(s => `${s.label}\n${s.clarified || s.answer}`)
+      .join('\n\n');
+    if (!plain) {
+      toast({ title: 'Nothing to share', description: 'Select sections with content first.', variant: 'destructive' });
+      return;
+    }
+    if (navigator.share) {
+      try {
+        await navigator.share({ title: title, text: plain });
+      } catch { /* user cancelled */ }
+    } else {
+      await navigator.clipboard.writeText(plain);
+      toast({ title: 'Copied!', description: 'Share not supported, copied to clipboard instead.' });
+    }
+  };
+
   const formatTimestamp = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -199,10 +339,11 @@ export function EditTaskSheet({
 
   const completedCount = checklistItems.filter(item => item.completed).length;
   const totalCount = checklistItems.length;
+  const hasSelectedSections = worksheetSections.some(s => s.selected && (s.clarified || s.answer));
 
   return (
     <Drawer open={open} onOpenChange={onOpenChange}>
-      <DrawerContent className="max-h-[85vh] flex flex-col">
+      <DrawerContent className="max-h-[90vh] flex flex-col">
         <DrawerHeader className="border-b border-border shrink-0">
           <DrawerTitle className="flex items-center gap-2">
             <CheckSquare className="h-5 w-5 text-todo" />
@@ -213,7 +354,7 @@ export function EditTaskSheet({
           </DrawerDescription>
         </DrawerHeader>
 
-        <div className="flex-1 overflow-y-auto max-h-[calc(85vh-160px)] p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto max-h-[calc(90vh-160px)] p-4 space-y-4">
           <div className="space-y-2">
             <Label htmlFor="edit-title">Title</Label>
             <Input
@@ -222,6 +363,154 @@ export function EditTaskSheet({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
             />
+          </div>
+
+          {/* AI Worksheet Section */}
+          <div className="space-y-3">
+            {!worksheetOpen ? (
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full gap-2 border-dashed border-primary/40 text-primary hover:bg-primary/5"
+                onClick={handleBreakdown}
+                disabled={isBreakingDown || !title.trim()}
+              >
+                {isBreakingDown ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Sparkles className="h-4 w-4" />
+                )}
+                {isBreakingDown ? 'Breaking down...' : 'AI Worksheet — Break this down'}
+              </Button>
+            ) : (
+              <div className="border border-primary/20 rounded-lg overflow-hidden">
+                <div className="bg-primary/5 px-3 py-2 flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium text-primary">
+                    <Sparkles className="h-4 w-4" />
+                    AI Worksheet
+                  </div>
+                  <div className="flex items-center gap-1">
+                    {hasSelectedSections && (
+                      <>
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={handleCopySelected} title="Copy selected">
+                          <Copy className="h-3.5 w-3.5" />
+                        </Button>
+                        <Button type="button" variant="ghost" size="icon-sm" onClick={handleShareSelected} title="Share selected">
+                          <Share2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs h-7"
+                      onClick={handleSelectAll}
+                    >
+                      {worksheetSections.every(s => s.selected) ? 'Deselect All' : 'Select All'}
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="divide-y divide-border">
+                  {worksheetSections.map((section, idx) => (
+                    <div key={idx} className="p-3 space-y-2">
+                      <div className="flex items-start gap-2">
+                        <Checkbox
+                          checked={section.selected}
+                          onCheckedChange={() => handleToggleSection(idx)}
+                          className="mt-0.5 shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold">{section.label}</p>
+                          <p className="text-xs text-muted-foreground">{section.prompt}</p>
+                        </div>
+                      </div>
+
+                      <Textarea
+                        placeholder={`Write your ${section.label.toLowerCase()} here...`}
+                        value={section.answer}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setWorksheetSections(prev => prev.map((s, i) => i === idx ? { ...s, answer: val } : s));
+                        }}
+                        rows={2}
+                        className="text-sm"
+                      />
+
+                      <div className="flex items-center gap-2">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="gap-1 text-xs h-7"
+                          onClick={() => handleClarifySection(idx)}
+                          disabled={section.isClarifying || !section.answer.trim()}
+                        >
+                          {section.isClarifying ? (
+                            <Loader2 className="h-3 w-3 animate-spin" />
+                          ) : (
+                            <Sparkles className="h-3 w-3" />
+                          )}
+                          Clarify with AI
+                        </Button>
+                        {section.selected && (section.clarified || section.answer) && (
+                          <div className="flex gap-1 ml-auto">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={async () => {
+                                await navigator.clipboard.writeText(section.clarified || section.answer);
+                                toast({ title: 'Copied!', description: `${section.label} copied.` });
+                              }}
+                            >
+                              <Copy className="h-3 w-3" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              className="h-7 text-xs gap-1"
+                              onClick={async () => {
+                                if (navigator.share) {
+                                  try {
+                                    await navigator.share({ title: section.label, text: section.clarified || section.answer });
+                                  } catch { /* cancelled */ }
+                                } else {
+                                  await navigator.clipboard.writeText(section.clarified || section.answer);
+                                  toast({ title: 'Copied!', description: 'Share not supported, copied instead.' });
+                                }
+                              }}
+                            >
+                              <Share2 className="h-3 w-3" />
+                            </Button>
+                          </div>
+                        )}
+                      </div>
+
+                      {section.clarified && (
+                        <div className="bg-muted/50 rounded-md p-2.5 space-y-2">
+                          <p className="text-xs font-medium text-muted-foreground">AI Suggestion</p>
+                          <p className="text-sm whitespace-pre-wrap">{section.clarified}</p>
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="gap-1 text-xs h-7"
+                            onClick={() => handleUseClarified(idx)}
+                          >
+                            <Check className="h-3 w-3" />
+                            Use this
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Checklist Section */}
@@ -235,7 +524,6 @@ export function EditTaskSheet({
               )}
             </div>
             
-            {/* Add new item */}
             <div className="flex gap-2">
               <Input
                 placeholder="Add checklist item..."
@@ -255,7 +543,6 @@ export function EditTaskSheet({
               </Button>
             </div>
             
-            {/* Checklist items */}
             {checklistItems.length > 0 && (
               <div className="space-y-1 border border-border rounded-md p-2">
                 {checklistItems.map((item) => (
