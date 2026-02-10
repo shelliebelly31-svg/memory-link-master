@@ -335,16 +335,17 @@ export function EditTaskSheet({
     try {
       if (navigator.share) {
         await navigator.share({ title: title || 'Worksheet', text: plain });
-      } else {
-        await navigator.clipboard.writeText(plain);
-        toast({ title: 'Copied!', description: 'Share not supported, copied to clipboard instead.' });
+        return;
       }
     } catch (err) {
-      // User cancelled share or it failed
-      if (err instanceof Error && err.name !== 'AbortError') {
-        console.error('Share failed:', err);
-        toast({ title: 'Share failed', description: 'Could not share content.', variant: 'destructive' });
-      }
+      if (err instanceof Error && err.name === 'AbortError') return;
+      // Fall through to clipboard on NotAllowedError or other failures
+    }
+    try {
+      await navigator.clipboard.writeText(plain);
+      toast({ title: 'Copied!', description: 'Content copied to clipboard.' });
+    } catch {
+      toast({ title: 'Failed', description: 'Could not copy to clipboard.', variant: 'destructive' });
     }
   };
 
@@ -502,15 +503,16 @@ export function EditTaskSheet({
                                 try {
                                   if (navigator.share) {
                                     await navigator.share({ title: section.label, text });
-                                  } else {
-                                    await navigator.clipboard.writeText(text);
-                                    toast({ title: 'Copied!', description: 'Share not supported, copied instead.' });
+                                    return;
                                   }
                                 } catch (err) {
-                                  if (err instanceof Error && err.name !== 'AbortError') {
-                                    console.error('Share failed:', err);
-                                    toast({ title: 'Share failed', variant: 'destructive' });
-                                  }
+                                  if (err instanceof Error && err.name === 'AbortError') return;
+                                }
+                                try {
+                                  await navigator.clipboard.writeText(text);
+                                  toast({ title: 'Copied!', description: 'Content copied to clipboard.' });
+                                } catch {
+                                  toast({ title: 'Failed', description: 'Could not copy.', variant: 'destructive' });
                                 }
                               }}
                             >
