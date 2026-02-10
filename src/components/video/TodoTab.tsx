@@ -44,7 +44,7 @@ export function TodoTab({
   const pendingTasks = tasks.filter(t => t.status !== 'completed');
   const completedTasks = tasks.filter(t => t.status === 'completed');
 
-  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[] }) => {
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[]; worksheet_sections?: unknown[] | null }) => {
     updateMutation.mutate({ id, ...data }, {
       onSuccess: () => setEditTask(null),
     });

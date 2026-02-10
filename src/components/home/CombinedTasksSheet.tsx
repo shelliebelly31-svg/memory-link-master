@@ -93,7 +93,7 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
     onOpenVideo(task.video_id, task.timestamp_seconds);
   };
 
-  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null }) => {
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; worksheet_sections?: unknown[] | null }) => {
     updateMutation.mutate({ id, ...data }, {
       onSuccess: () => setEditTask(null),
     });

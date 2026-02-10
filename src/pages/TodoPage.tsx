@@ -110,7 +110,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
     navigate(`/video/${task.video_id}?t=${task.timestamp_seconds}`);
   };
 
-  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[] }) => {
+  const handleSaveEdit = (id: string, data: { title: string; description: string | null; due_date: string | null; checklist_items: ChecklistItem[]; worksheet_sections?: unknown[] | null }) => {
     updateMutation.mutate({ id, ...data }, {
       onSuccess: () => setEditTask(null),
     });
