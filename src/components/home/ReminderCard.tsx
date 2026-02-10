@@ -63,9 +63,7 @@ export function ReminderCard({ reminder, index, onOpenVideo, onDelete, onEdit }:
     >
       <CardContent className="p-4 space-y-3">
         {/* Header with edit and delete */}
-        <div className="flex items-start justify-between gap-2">
-          <p className="font-medium leading-relaxed flex-1">{reminder.summary}</p>
-          <div className="flex items-center gap-1 shrink-0">
+        <div className="flex items-center justify-end gap-1">
             <Button
               variant="ghost"
               size="icon"
@@ -106,8 +104,8 @@ export function ReminderCard({ reminder, index, onOpenVideo, onDelete, onEdit }:
             >
               <Trash2 className="h-4 w-4" />
             </Button>
-          </div>
         </div>
+        <p className="font-medium leading-relaxed">{reminder.summary}</p>
         
         {/* Key points */}
         {reminder.key_points.length > 0 && (
