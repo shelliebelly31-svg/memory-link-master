@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { CheckSquare, Circle, CheckCircle2, Calendar, ExternalLink, Pencil, Trash2 } from 'lucide-react';
+import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import {
   Sheet,
   SheetContent,
@@ -56,7 +57,7 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
   const [filter, setFilter] = useState<FilterType>('all');
   const [editTask, setEditTask] = useState<TaskWithVideo | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
-  
+  const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const updateStatus = useUpdateTaskStatusGlobal();
   const updateMutation = useUpdateTask();
   const deleteMutation = useDeleteTask();
@@ -78,7 +79,13 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
 
   const handleToggleComplete = (task: TaskWithVideo) => {
     const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-    updateStatus.mutate({ taskId: task.id, status: newStatus });
+    updateStatus.mutate({ taskId: task.id, status: newStatus }, {
+      onSuccess: (data) => {
+        if (newStatus === 'completed' && data?.completedCount && data.completedCount % 10 === 0) {
+          setMilestoneCount(data.completedCount);
+        }
+      },
+    });
   };
 
   const handleOpenTask = (task: TaskWithVideo) => {
@@ -253,6 +260,13 @@ export function CombinedTasksSheet({ open, onOpenChange, tasks, onOpenVideo }: C
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* Milestone Encouragement */}
+      <MilestoneDialog
+        open={milestoneCount !== null}
+        onOpenChange={(open) => !open && setMilestoneCount(null)}
+        completedCount={milestoneCount || 0}
+      />
     </Sheet>
   );
 }

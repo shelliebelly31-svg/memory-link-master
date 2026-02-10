@@ -513,9 +513,22 @@ export function useUpdateTaskStatus() {
         .eq('id', taskId);
 
       if (error) throw error;
+
+      // If completing, get total completed count for milestone check
+      if (status === 'completed') {
+        const { count, error: countError } = await supabase
+          .from('tasks')
+          .select('*', { count: 'exact', head: true })
+          .eq('status', 'completed');
+
+        if (countError) throw countError;
+        return { completedCount: count || 0 };
+      }
+      return { completedCount: 0 };
     },
     onSuccess: (_, variables) => {
       queryClient.invalidateQueries({ queryKey: ['tasks', variables.videoId] });
+      queryClient.invalidateQueries({ queryKey: ['all_tasks'] });
     },
   });
 }

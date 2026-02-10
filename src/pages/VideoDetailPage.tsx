@@ -2,6 +2,7 @@ import { useState, useMemo, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus } from 'lucide-react';
+import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { YouTubePlayer } from '@/components/video/YouTubePlayer';
 import { TranscriptView } from '@/components/video/TranscriptView';
@@ -46,6 +47,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
   const [prefillTimestamp, setPrefillTimestamp] = useState<number | undefined>();
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
+  const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -189,10 +191,17 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const handleToggleTaskStatus = (taskId: string) => {
     const task = tasks.find(t => t.id === taskId);
     if (task) {
+      const newStatus = task.status === 'completed' ? 'pending' : 'completed';
       updateTaskMutation.mutate({
         taskId,
-        status: task.status === 'completed' ? 'pending' : 'completed',
+        status: newStatus,
         videoId: video.id,
+      }, {
+        onSuccess: (data) => {
+          if (newStatus === 'completed' && data?.completedCount && data.completedCount % 10 === 0) {
+            setMilestoneCount(data.completedCount);
+          }
+        },
       });
     }
   };
@@ -427,6 +436,11 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         prefillTitle={prefillTitle}
         prefillTimestamp={prefillTimestamp}
         prefillEndTimestamp={prefillEndTimestamp}
+      />
+      <MilestoneDialog
+        open={milestoneCount !== null}
+        onOpenChange={(open) => !open && setMilestoneCount(null)}
+        completedCount={milestoneCount || 0}
       />
     </PageLayout>
   );
