@@ -30,7 +30,7 @@ interface DailyQuizSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   questions: QuizItemWithVideo[];
-  allVideos: { id: string; title: string }[];
+  allVideos: { id: string; title: string; quizCount?: number }[];
   selectedVideos: string[];
   onSelectVideos: (videos: string[]) => void;
   quizItems: QuizItemWithVideo[];
@@ -370,23 +370,27 @@ export function DailyQuizSheet({
               {/* Video list */}
               <div className="space-y-2">
                 {allVideos.map(video => {
-                  const videoQuestions = quizItems.filter(q => q.video_id === video.id).length;
+                  const hasQuiz = (video.quizCount ?? 0) > 0;
                   return (
                     <div
                       key={video.id}
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
-                        selectedVideos.includes(video.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50"
+                        selectedVideos.includes(video.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50",
+                        !hasQuiz && "opacity-60"
                       )}
-                      onClick={() => handleVideoToggle(video.id)}
+                      onClick={() => hasQuiz && handleVideoToggle(video.id)}
                     >
                       <Checkbox 
                         checked={selectedVideos.includes(video.id)}
-                        onCheckedChange={() => handleVideoToggle(video.id)}
+                        onCheckedChange={() => hasQuiz && handleVideoToggle(video.id)}
+                        disabled={!hasQuiz}
                       />
                       <div className="flex-1 min-w-0">
                         <p className="font-medium line-clamp-1">{video.title}</p>
-                        <p className="text-xs text-muted-foreground">{videoQuestions} questions</p>
+                        <p className="text-xs text-muted-foreground">
+                          {hasQuiz ? `${video.quizCount} questions` : 'No quiz generated yet'}
+                        </p>
                       </div>
                     </div>
                   );

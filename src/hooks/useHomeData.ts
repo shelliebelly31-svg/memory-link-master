@@ -271,6 +271,26 @@ export function useUndoDeleteReminder() {
   });
 }
 
+// Get all ready videos for quiz picker
+export function useAllReadyVideos() {
+  const { user } = useAuth();
+
+  return useQuery({
+    queryKey: ['all_ready_videos', user?.id],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('videos')
+        .select('id, title')
+        .eq('status', 'ready')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return data as { id: string; title: string }[];
+    },
+    enabled: !!user,
+  });
+}
+
 // Get all tasks across all videos
 export function useAllTasks() {
   const { user } = useAuth();
