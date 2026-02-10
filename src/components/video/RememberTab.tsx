@@ -72,32 +72,18 @@ export function RememberTab({
           </h3>
           {rememberItems.map((item) => (
             <div key={item.id} className="card-elevated p-4 space-y-4">
-              <div className="flex items-start justify-between gap-3">
-                <h4 className="font-medium">{item.summary}</h4>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setEditItem(item)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setDeleteItemId(item.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => onJumpToTimestamp(item.timestamp_seconds)}
-                  >
-                    <ExternalLink className="h-4 w-4" />
-                  </Button>
-                </div>
+              <div className="flex items-center justify-end gap-1">
+                <Button variant="ghost" size="icon-sm" onClick={() => setEditItem(item)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => setDeleteItemId(item.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => onJumpToTimestamp(item.timestamp_seconds)}>
+                  <ExternalLink className="h-4 w-4" />
+                </Button>
               </div>
+              <h4 className="font-medium">{item.summary}</h4>
               
               <div className="space-y-2">
                 <p className="text-sm text-muted-foreground font-medium">Key Points:</p>

@@ -76,6 +76,14 @@ export function TodoTab({
               key={task.id}
               className="card-elevated p-4 border-l-4 border-todo"
             >
+              <div className="flex items-center justify-end gap-1 mb-2">
+                <Button variant="ghost" size="icon-sm" onClick={() => setEditTask(task)}>
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button variant="ghost" size="icon-sm" onClick={() => setDeleteTaskId(task.id)}>
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
               <div className="flex items-start gap-3">
                 <div className="flex items-center gap-2 mt-0.5">
                   <GripVertical className="h-4 w-4 text-muted-foreground/50 cursor-grab" />
@@ -104,22 +112,6 @@ export function TodoTab({
                       </Badge>
                     )}
                   </div>
-                </div>
-                <div className="flex items-center gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setEditTask(task)}
-                  >
-                    <Pencil className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon-sm"
-                    onClick={() => setDeleteTaskId(task.id)}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
                 </div>
               </div>
             </div>
