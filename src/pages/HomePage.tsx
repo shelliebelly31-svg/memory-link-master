@@ -5,7 +5,7 @@ import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAllTasks, useAllQuizItems, useAllRemindersCombined, CombinedReminder, useSoftDeleteReminder, useUndoDeleteReminder } from '@/hooks/useHomeData';
+import { useAllTasks, useAllQuizItems, useAllRemindersCombined, CombinedReminder, useSoftDeleteReminder, useUndoDeleteReminder, useAllReadyVideos } from '@/hooks/useHomeData';
 import { ReminderCard } from '@/components/home/ReminderCard';
 import { CombinedTasksSheet } from '@/components/home/CombinedTasksSheet';
 import { DailyQuizSheet } from '@/components/home/DailyQuizSheet';
@@ -57,6 +57,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const { data: rememberItems = [], isLoading: loadingReminders } = useAllRemindersCombined();
   const { data: allTasks = [], isLoading: loadingTasks } = useAllTasks();
   const { data: quizItems = [], isLoading: loadingQuiz } = useAllQuizItems();
+  const { data: allReadyVideos = [] } = useAllReadyVideos();
   
   const softDeleteMutation = useSoftDeleteReminder();
   const undoDeleteMutation = useUndoDeleteReminder();
@@ -83,16 +84,20 @@ export default function HomePage({ onLogout }: HomePageProps) {
     return shuffleWithSeed(filtered, todaySeed).slice(0, 10);
   }, [quizItems, selectedVideos, todaySeed]);
 
-  // Get unique videos that have quiz items
-  const videosWithQuiz = useMemo(() => {
-    const videoMap = new Map<string, { id: string; title: string }>();
+  // Get ALL videos for the quiz picker, with quiz counts
+  const allVideosForQuiz = useMemo(() => {
+    const quizCountMap = new Map<string, number>();
     quizItems.forEach(q => {
-      if (!videoMap.has(q.video_id)) {
-        videoMap.set(q.video_id, { id: q.video_id, title: q.video_title });
-      }
+      quizCountMap.set(q.video_id, (quizCountMap.get(q.video_id) || 0) + 1);
     });
-    return Array.from(videoMap.values());
-  }, [quizItems]);
+
+    // Use all ready videos from the library
+    return allReadyVideos.map(v => ({
+      id: v.id,
+      title: v.title,
+      quizCount: quizCountMap.get(v.id) || 0,
+    }));
+  }, [quizItems, allReadyVideos]);
 
   // Task counts
   const pendingTasks = allTasks.filter(t => t.status === 'pending').length;
@@ -293,7 +298,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
                         <Trophy className="h-10 w-10 text-primary mx-auto mb-2" />
                         <h3 className="font-semibold text-lg">Ready to test yourself?</h3>
                         <p className="text-sm text-muted-foreground">
-                          {quizItems.length} questions available from {videosWithQuiz.length} videos
+                          {quizItems.length} questions available from {allVideosForQuiz.filter(v => v.quizCount > 0).length} videos
                         </p>
                       </div>
                       <div className="flex gap-3">
@@ -382,7 +387,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
         open={quizOpen}
         onOpenChange={setQuizOpen}
         questions={dailyQuizQuestions}
-        allVideos={videosWithQuiz}
+        allVideos={allVideosForQuiz}
         selectedVideos={selectedVideos}
         onSelectVideos={setSelectedVideos}
         quizItems={quizItems}
