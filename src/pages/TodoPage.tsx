@@ -25,6 +25,7 @@ import { useUpdateTask, useDeleteTask, useUpdateTaskChecklist, ChecklistItem } f
 import { EditTaskSheet } from '@/components/video/EditTaskSheet';
 import { TextMeTaskDialog } from '@/components/todo/TextMeTaskDialog';
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
+import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import { cn } from '@/lib/utils';
 
 interface TodoPageProps {
@@ -54,7 +55,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
   const [textMeTask, setTextMeTask] = useState<TaskWithVideo | null>(null);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
-
+  const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const { data: allTasks = [], isLoading } = useAllTasks();
   const updateStatus = useUpdateTaskStatusGlobal();
   const updateMutation = useUpdateTask();
@@ -96,7 +97,13 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
 
   const handleToggleComplete = (task: TaskWithVideo) => {
     const newStatus = task.status === 'completed' ? 'pending' : 'completed';
-    updateStatus.mutate({ taskId: task.id, status: newStatus });
+    updateStatus.mutate({ taskId: task.id, status: newStatus }, {
+      onSuccess: (data) => {
+        if (newStatus === 'completed' && data?.completedCount && data.completedCount % 10 === 0) {
+          setMilestoneCount(data.completedCount);
+        }
+      },
+    });
   };
 
   const handleOpenVideo = (task: TaskWithVideo) => {
@@ -348,6 +355,13 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
       <AddTodoDialog
         open={addTodoOpen}
         onOpenChange={setAddTodoOpen}
+      />
+
+      {/* Milestone Encouragement */}
+      <MilestoneDialog
+        open={milestoneCount !== null}
+        onOpenChange={(open) => !open && setMilestoneCount(null)}
+        completedCount={milestoneCount || 0}
       />
     </PageLayout>
   );

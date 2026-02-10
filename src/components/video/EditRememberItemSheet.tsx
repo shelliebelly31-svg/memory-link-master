@@ -29,6 +29,7 @@ interface EditRememberItemSheetProps {
   onSave: (id: string, data: { summary: string; key_points: string[] }) => void;
   isSaving?: boolean;
   videoTitle?: string;
+  autoGenerateSuggestions?: boolean;
 }
 
 interface AISuggestions {
@@ -43,6 +44,7 @@ export function EditRememberItemSheet({
   onSave,
   isSaving,
   videoTitle,
+  autoGenerateSuggestions = false,
 }: EditRememberItemSheetProps) {
   const [summary, setSummary] = useState('');
   const [keyPoints, setKeyPoints] = useState<string[]>([]);
@@ -59,6 +61,8 @@ export function EditRememberItemSheet({
   const summaryRef = useRef<HTMLTextAreaElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
+  const autoTriggeredRef = useRef(false);
+
   useEffect(() => {
     if (item && open) {
       setSummary(item.summary);
@@ -68,8 +72,17 @@ export function EditRememberItemSheet({
       setSelectedKeyPoints(new Set());
       setSelectedTodos(new Set());
       setIsFullScreen(false);
+      autoTriggeredRef.current = false;
     }
   }, [item, open]);
+
+  // Auto-trigger AI suggestions when opened from home page
+  useEffect(() => {
+    if (open && autoGenerateSuggestions && item && summary.trim() && !autoTriggeredRef.current && !suggestions && !isGenerating) {
+      autoTriggeredRef.current = true;
+      handleGenerateSuggestions();
+    }
+  }, [open, autoGenerateSuggestions, item, summary]);
 
   // Handle keyboard visibility using visualViewport API
   useEffect(() => {

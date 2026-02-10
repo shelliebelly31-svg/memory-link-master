@@ -400,7 +400,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
         onOpenChange={setAddTodoOpen}
       />
 
-      {/* Edit Reminder Sheet */}
+      {/* Edit Reminder Sheet - auto-generates AI suggestions */}
       <EditRememberItemSheet
         open={!!editReminder}
         onOpenChange={(open) => !open && setEditReminder(null)}
@@ -419,6 +419,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
         }}
         isSaving={updateRememberMutation.isPending}
         videoTitle={editReminder?.video_title}
+        autoGenerateSuggestions={true}
       />
     </PageLayout>
   );
