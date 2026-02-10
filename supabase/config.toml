@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.generate-key-points]
 verify_jwt = false
+
+[functions.ai-clarify-task]
+verify_jwt = false
