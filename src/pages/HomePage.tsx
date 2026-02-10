@@ -251,7 +251,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
                       index={index}
                       onOpenVideo={() => handleOpenVideo(reminder.video_id, reminder.timestamp_seconds)}
                       onDelete={() => handleDeleteReminder(reminder, index)}
-                      onEdit={!reminder.is_manual ? () => setEditReminder(reminder) : undefined}
+                      onEdit={() => setEditReminder(reminder)}
                     />
                   ))}
 
