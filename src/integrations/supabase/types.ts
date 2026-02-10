@@ -417,6 +417,7 @@ export type Database = {
           title: string
           user_id: string
           video_id: string
+          worksheet_sections: Json | null
         }
         Insert: {
           checklist_items?: Json | null
@@ -433,6 +434,7 @@ export type Database = {
           title: string
           user_id: string
           video_id: string
+          worksheet_sections?: Json | null
         }
         Update: {
           checklist_items?: Json | null
@@ -449,6 +451,7 @@ export type Database = {
           title?: string
           user_id?: string
           video_id?: string
+          worksheet_sections?: Json | null
         }
         Relationships: [
           {

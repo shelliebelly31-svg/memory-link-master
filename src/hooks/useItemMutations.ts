@@ -100,16 +100,21 @@ export function useUpdateTask() {
       description,
       due_date,
       checklist_items,
+      worksheet_sections,
     }: { 
       id: string; 
       title: string; 
       description: string | null;
       due_date: string | null;
       checklist_items?: ChecklistItem[];
+      worksheet_sections?: unknown[] | null;
     }) => {
       const updateData: Record<string, unknown> = { title, description, due_date };
       if (checklist_items !== undefined) {
         updateData.checklist_items = checklist_items as unknown as Json;
+      }
+      if (worksheet_sections !== undefined) {
+        updateData.worksheet_sections = worksheet_sections as unknown as Json;
       }
       
       const { error } = await supabase

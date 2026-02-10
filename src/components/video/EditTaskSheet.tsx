@@ -45,12 +45,14 @@ interface EditTaskSheetProps {
     due_date: string | null;
     video_title?: string;
     checklist_items?: ChecklistItem[] | null;
+    worksheet_sections?: WorksheetSection[] | null;
   } | null;
   onSave: (id: string, data: { 
     title: string; 
     description: string | null; 
     due_date: string | null;
     checklist_items: ChecklistItem[];
+    worksheet_sections: WorksheetSection[] | null;
   }) => void;
   onChecklistToggle?: (id: string, checklistItems: ChecklistItem[]) => void;
   isSaving?: boolean;
@@ -125,8 +127,15 @@ export function EditTaskSheet({
       setTitle(task.title);
       setDueDate(task.due_date || '');
       setNewItemText('');
-      setWorksheetSections([]);
-      setWorksheetOpen(false);
+      
+      // Restore saved worksheet sections
+      if (task.worksheet_sections && task.worksheet_sections.length > 0) {
+        setWorksheetSections(task.worksheet_sections.map(s => ({ ...s, isClarifying: false })));
+        setWorksheetOpen(true);
+      } else {
+        setWorksheetSections([]);
+        setWorksheetOpen(false);
+      }
       
       if (task.checklist_items && task.checklist_items.length > 0) {
         setChecklistItems(task.checklist_items);
@@ -154,6 +163,9 @@ export function EditTaskSheet({
       description: description.trim() || null,
       due_date: dueDate || null,
       checklist_items: checklistItems,
+      worksheet_sections: worksheetSections.length > 0 
+        ? worksheetSections.map(({ isClarifying, ...rest }) => ({ ...rest, isClarifying: false }))
+        : null,
     });
   };
 
