@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Trophy, CheckCircle2, XCircle, RotateCcw, Play, ChevronLeft, Sparkles, Share2, Copy, Check, Loader2, ExternalLink } from 'lucide-react';
 import {
   Sheet,
@@ -69,6 +70,7 @@ export function DailyQuizSheet({
   
   const saveAttempt = useSaveQuizAttempt();
   const { toast } = useToast();
+  const navigate = useNavigate();
   const { createSharedQuiz, isCreating: isCreatingShare } = useCreateSharedQuiz();
 
   // Get questions based on selection, prioritizing unused questions, then shuffle
@@ -377,19 +379,29 @@ export function DailyQuizSheet({
                       className={cn(
                         "flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors",
                         selectedVideos.includes(video.id) ? "border-primary bg-primary/5" : "hover:bg-muted/50",
-                        !hasQuiz && "opacity-60"
+                        !hasQuiz && "opacity-80"
                       )}
-                      onClick={() => hasQuiz && handleVideoToggle(video.id)}
+                      onClick={() => {
+                        if (hasQuiz) {
+                          handleVideoToggle(video.id);
+                        } else {
+                          handleClose();
+                          navigate(`/video/${video.id}`);
+                        }
+                      }}
                     >
-                      <Checkbox 
-                        checked={selectedVideos.includes(video.id)}
-                        onCheckedChange={() => hasQuiz && handleVideoToggle(video.id)}
-                        disabled={!hasQuiz}
-                      />
+                      {hasQuiz ? (
+                        <Checkbox 
+                          checked={selectedVideos.includes(video.id)}
+                          onCheckedChange={() => handleVideoToggle(video.id)}
+                        />
+                      ) : (
+                        <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
                       <div className="flex-1 min-w-0">
                         <p className="font-medium line-clamp-1">{video.title}</p>
                         <p className="text-xs text-muted-foreground">
-                          {hasQuiz ? `${video.quizCount} questions` : 'No quiz generated yet'}
+                          {hasQuiz ? `${video.quizCount} questions` : 'Tap to generate quiz →'}
                         </p>
                       </div>
                     </div>
