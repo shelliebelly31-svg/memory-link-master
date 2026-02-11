@@ -305,21 +305,24 @@ export function useAllTasks() {
 
       if (tasksError) throw tasksError;
 
-      const videoIds = [...new Set(tasks.map(t => t.video_id))];
-      const { data: videos, error: videosError } = await supabase
-        .from('videos')
-        .select('id, title, youtube_id')
-        .in('id', videoIds);
+      const videoIds = [...new Set(tasks.map(t => t.video_id).filter(Boolean))];
+      
+      let videoMap = new Map<string, { id: string; title: string; youtube_id: string }>();
+      if (videoIds.length > 0) {
+        const { data: videos, error: videosError } = await supabase
+          .from('videos')
+          .select('id, title, youtube_id')
+          .in('id', videoIds);
 
-      if (videosError) throw videosError;
-
-      const videoMap = new Map(videos.map(v => [v.id, v]));
+        if (videosError) throw videosError;
+        videoMap = new Map(videos.map(v => [v.id, v]));
+      }
 
       return tasks.map(task => {
-        const video = videoMap.get(task.video_id);
+        const video = task.video_id ? videoMap.get(task.video_id) : null;
         return {
           ...task,
-          video_title: video?.title || 'Unknown Video',
+          video_title: video?.title || '',
           video_youtube_id: video?.youtube_id || '',
           checklist_items: task.checklist_items as unknown as ChecklistItem[] | null,
         } as TaskWithVideo;
