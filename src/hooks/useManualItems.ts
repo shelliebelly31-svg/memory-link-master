@@ -233,7 +233,7 @@ export function useCreateManualTask() {
         .insert({
           user_id: user!.id,
           highlight_id: highlightId,
-          video_id: data.video_id || null,
+          video_id: data.video_id || null as any,
           title: data.title,
           description: data.description || null,
           timestamp_seconds: timestampSeconds,
