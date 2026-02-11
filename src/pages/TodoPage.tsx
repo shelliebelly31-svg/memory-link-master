@@ -66,8 +66,9 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
   const filteredTasks = useMemo(() => {
     let tasks = allTasks;
 
-    // Apply status filter
+    // Apply status filter - "all" and "open" hide completed tasks
     switch (filter) {
+      case 'all':
       case 'open':
         tasks = tasks.filter(t => t.status !== 'completed');
         break;
@@ -90,7 +91,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
   }, [allTasks, filter, searchQuery]);
 
   const counts = {
-    all: allTasks.length,
+    all: allTasks.filter(t => t.status !== 'completed').length,
     open: allTasks.filter(t => t.status !== 'completed').length,
     done: allTasks.filter(t => t.status === 'completed').length,
   };
@@ -257,42 +258,56 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
 
                   {/* Actions Row */}
                   <div className="flex items-center gap-1 mt-3 pt-3 border-t border-border">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setEditTask(task)}
-                      className="gap-1.5"
-                    >
-                      <Pencil className="h-4 w-4" />
-                      Edit
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setDeleteTaskId(task.id)}
-                      className="gap-1.5 text-destructive hover:text-destructive"
-                    >
-                      <Trash2 className="h-4 w-4" />
-                      Delete
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleOpenVideo(task)}
-                      className="gap-1.5"
-                    >
-                      <ExternalLink className="h-4 w-4" />
-                      Video
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => setTextMeTask(task)}
-                      className="gap-1.5 ml-auto"
-                    >
-                      <MessageSquare className="h-4 w-4" />
-                      Text Me
-                    </Button>
+                    {task.status === 'completed' ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setDeleteTaskId(task.id)}
+                        className="gap-1.5 text-destructive hover:text-destructive"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                        Delete
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setEditTask(task)}
+                          className="gap-1.5"
+                        >
+                          <Pencil className="h-4 w-4" />
+                          Edit
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setDeleteTaskId(task.id)}
+                          className="gap-1.5 text-destructive hover:text-destructive"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                          Delete
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleOpenVideo(task)}
+                          className="gap-1.5"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                          Video
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => setTextMeTask(task)}
+                          className="gap-1.5 ml-auto"
+                        >
+                          <MessageSquare className="h-4 w-4" />
+                          Text Me
+                        </Button>
+                      </>
+                    )}
                   </div>
                 </CardContent>
               </Card>
