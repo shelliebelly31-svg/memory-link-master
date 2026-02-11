@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Brain, Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
+import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
+import memoryLinkIcon from '@/assets/memory-link-icon.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
@@ -59,8 +60,8 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
         <div className="mx-auto w-full max-w-sm space-y-8">
           {/* Logo & Branding */}
           <div className="text-center space-y-4">
-            <div className="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-primary/10 mb-2">
-              <Brain className="h-8 w-8 text-primary" />
+            <div className="inline-flex items-center justify-center w-20 h-20 mb-2">
+              <img src={memoryLinkIcon} alt="Memory Link" className="w-16 h-16 object-contain" />
             </div>
             <h1 className="text-3xl font-bold tracking-tight">Memory Link</h1>
             <p className="text-muted-foreground">
