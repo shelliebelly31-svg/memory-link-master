@@ -416,7 +416,7 @@ export type Database = {
           timestamp_seconds: number
           title: string
           user_id: string
-          video_id: string
+          video_id: string | null
           worksheet_sections: Json | null
         }
         Insert: {
@@ -433,7 +433,7 @@ export type Database = {
           timestamp_seconds: number
           title: string
           user_id: string
-          video_id: string
+          video_id?: string | null
           worksheet_sections?: Json | null
         }
         Update: {
@@ -450,7 +450,7 @@ export type Database = {
           timestamp_seconds?: number
           title?: string
           user_id?: string
-          video_id?: string
+          video_id?: string | null
           worksheet_sections?: Json | null
         }
         Relationships: [
