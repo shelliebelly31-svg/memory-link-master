@@ -214,10 +214,13 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
                     
                     <div className="flex-1 min-w-0">
                       {/* Title */}
-                      <p className={cn(
-                        "font-medium",
-                        task.status === 'completed' && "line-through"
-                      )}>
+                      <p 
+                        className={cn(
+                          "font-medium cursor-pointer hover:underline",
+                          task.status === 'completed' && "line-through"
+                        )}
+                        onClick={() => setEditTask(task)}
+                      >
                         {task.title}
                       </p>
 
