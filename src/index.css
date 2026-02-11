@@ -41,13 +41,13 @@
     --remember-foreground: 0 0% 100%;
     --remember-muted: 262 60% 95%;
     
-    --todo: 38 92% 50%;
-    --todo-foreground: 38 92% 10%;
-    --todo-muted: 38 80% 94%;
+    --todo: 24 95% 53%;
+    --todo-foreground: 0 0% 100%;
+    --todo-muted: 24 90% 94%;
     
-    --ai-suggested: 158 64% 52%;
-    --ai-suggested-foreground: 158 64% 10%;
-    --ai-suggested-muted: 158 50% 94%;
+    --ai-suggested: 145 63% 42%;
+    --ai-suggested-foreground: 0 0% 100%;
+    --ai-suggested-muted: 145 50% 93%;
 
     --surface-elevated: 0 0% 100%;
     --surface-sunken: 220 20% 95%;
