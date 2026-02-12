@@ -60,7 +60,7 @@ function App() {
   const [showSplash, setShowSplash] = useState(true);
 
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 3000);
+    const timer = setTimeout(() => setShowSplash(false), 3500);
     return () => clearTimeout(timer);
   }, []);
 
@@ -70,8 +70,8 @@ function App() {
         <style>{`
           @keyframes splashSequence {
             0% { opacity: 0; }
-            33% { opacity: 1; }
-            66% { opacity: 1; }
+            29% { opacity: 1; }
+            57% { opacity: 1; }
             100% { opacity: 0; }
           }
         `}</style>
@@ -83,7 +83,7 @@ function App() {
             backgroundPosition: 'center',
             backgroundRepeat: 'no-repeat',
             backgroundColor: '#0b0e1a',
-            animation: 'splashSequence 3s ease-in-out forwards',
+            animation: 'splashSequence 3.5s ease-in-out forwards',
           }}
         />
       </>
