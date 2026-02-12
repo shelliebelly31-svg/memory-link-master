@@ -59,20 +59,28 @@ function AppRoutes() {
 function App() {
   const [showSplash, setShowSplash] = useState(true);
 
+  const [fading, setFading] = useState(false);
+
   useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 5000);
-    return () => clearTimeout(timer);
+    const fadeTimer = setTimeout(() => setFading(true), 4000);
+    const hideTimer = setTimeout(() => setShowSplash(false), 5000);
+    return () => { clearTimeout(fadeTimer); clearTimeout(hideTimer); };
   }, []);
 
   if (showSplash) {
     return (
-      <div className="min-h-screen animate-fade-in" style={{
-        backgroundImage: `url(${splashLogo})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#0b0e1a'
-      }} />
+      <div
+        className="min-h-screen"
+        style={{
+          backgroundImage: `url(${splashLogo})`,
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
+          backgroundRepeat: 'no-repeat',
+          backgroundColor: '#0b0e1a',
+          opacity: fading ? 0 : 1,
+          transition: 'opacity 1s ease-out',
+        }}
+      />
     );
   }
 
