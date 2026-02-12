@@ -71,7 +71,7 @@ function App() {
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        backgroundColor: '#0a0a1a'
+        backgroundColor: '#0b0e1a'
       }} />
     );
   }
