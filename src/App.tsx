@@ -28,14 +28,13 @@ function AppRoutes() {
 
   if (loading || showSplash) {
     return (
-      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0a0a1a 0%, #0d1025 50%, #0a0a1a 100%)' }}>
-        <img
-          src={splashLogo}
-          alt="Memory Link"
-          className="w-full h-full object-cover animate-fade-in"
-          style={{ position: 'absolute', inset: 0 }}
-        />
-      </div>
+      <div className="min-h-screen animate-fade-in" style={{ 
+        backgroundImage: `url(${splashLogo})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#0a0a1a'
+      }} />
     );
   }
 
