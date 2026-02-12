@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -18,8 +19,14 @@ const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { user, loading, signIn, signUp, signOut } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
 
-  if (loading) {
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (loading || showSplash) {
     return (
       <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0a0a1a 0%, #0d1025 50%, #0a0a1a 100%)' }}>
         <img
