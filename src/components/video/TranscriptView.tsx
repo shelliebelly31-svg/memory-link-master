@@ -58,6 +58,8 @@ interface TranscriptViewProps {
   onOpenReminderSheet: (text: string, timestamp: number, endTimestamp?: number) => void;
   onOpenTodoSheet: (text: string, timestamp: number, endTimestamp?: number) => void;
   getCurrentTime?: () => number | null;
+  onSeekTo?: (seconds: number) => void;
+  onPauseVideo?: () => void;
 }
 
 interface SelectionState {
@@ -84,6 +86,8 @@ export function TranscriptView({
   onOpenReminderSheet,
   onOpenTodoSheet,
   getCurrentTime,
+  onSeekTo,
+  onPauseVideo,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -98,6 +102,13 @@ export function TranscriptView({
   
   // Track active selection for disabling pointer events on sticky elements
   const isSelectionActive = useSelectionActive(transcriptContentRef);
+
+  // Pause video when text selection becomes active
+  useEffect(() => {
+    if (isSelectionActive && onPauseVideo) {
+      onPauseVideo();
+    }
+  }, [isSelectionActive, onPauseVideo]);
 
   // Get all highlights that overlap with a segment
   const getSegmentHighlights = (segment: TranscriptSegment): Highlight[] => {
@@ -504,12 +515,14 @@ export function TranscriptView({
               >
                 <Plus className="h-3 w-3" />
               </button>
-              <span 
-                className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums"
+              <button
+                onClick={() => onSeekTo?.(segment.start_seconds)}
+                className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums hover:text-primary transition-colors cursor-pointer"
                 style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                aria-label={`Jump to ${formatTimestamp(segment.start_seconds)}`}
               >
                 {formatTimestamp(segment.start_seconds)}
-              </span>
+              </button>
               <span className="text-sm leading-snug flex-1">
                 {renderHighlightedText(segment)}
               </span>

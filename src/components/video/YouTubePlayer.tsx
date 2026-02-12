@@ -4,6 +4,7 @@ interface YouTubePlayerProps {
   videoId: string;
   onTimeUpdate?: (seconds: number) => void;
   onTimeRef?: (getTime: () => number | null) => void;
+  onPlayerControls?: (controls: { seekTo: (seconds: number) => void; pause: () => void; play: () => void }) => void;
 }
 
 declare global {
@@ -13,7 +14,7 @@ declare global {
   }
 }
 
-export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef }: YouTubePlayerProps) {
+export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef, onPlayerControls }: YouTubePlayerProps) {
   const playerRef = useRef<any>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -22,6 +23,27 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef }: YouTubePlaye
       return playerRef.current.getCurrentTime();
     }
     return null;
+  }, []);
+
+  const seekTo = useCallback((seconds: number) => {
+    if (playerRef.current && typeof playerRef.current.seekTo === 'function') {
+      playerRef.current.seekTo(seconds, true);
+      if (typeof playerRef.current.playVideo === 'function') {
+        playerRef.current.playVideo();
+      }
+    }
+  }, []);
+
+  const pause = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.pauseVideo === 'function') {
+      playerRef.current.pauseVideo();
+    }
+  }, []);
+
+  const play = useCallback(() => {
+    if (playerRef.current && typeof playerRef.current.playVideo === 'function') {
+      playerRef.current.playVideo();
+    }
   }, []);
 
   useEffect(() => {
@@ -46,6 +68,9 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef }: YouTubePlaye
               if (onTimeRef) {
                 onTimeRef(getCurrentTime);
               }
+              if (onPlayerControls) {
+                onPlayerControls({ seekTo, pause, play });
+              }
             },
           },
         });
@@ -63,7 +88,7 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef }: YouTubePlaye
         playerRef.current.destroy();
       }
     };
-  }, [videoId, onTimeRef, getCurrentTime]);
+  }, [videoId, onTimeRef, onPlayerControls, getCurrentTime, seekTo, pause, play]);
 
   // Report time ref after initial mount
   useEffect(() => {

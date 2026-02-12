@@ -51,6 +51,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
+  const playerControlsRef = useRef<{ seekTo: (s: number) => void; pause: () => void; play: () => void } | null>(null);
 
   // Fetch real data from database
   const { data: video, isLoading: videoLoading, error: videoError } = useVideo(id || '');
@@ -292,7 +293,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           <div className="px-4 pt-4">
             <YouTubePlayer 
               videoId={video.youtube_id} 
-              onTimeRef={(getTime) => { playerTimeRef.current = getTime; }} 
+              onTimeRef={(getTime) => { playerTimeRef.current = getTime; }}
+              onPlayerControls={(controls) => { playerControlsRef.current = controls; }}
             />
           </div>
         )}
@@ -373,6 +375,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onOpenReminderSheet={handleOpenReminderFromSelection}
                   onOpenTodoSheet={handleOpenTodoFromSelection}
                   getCurrentTime={playerTimeRef.current || undefined}
+                  onSeekTo={(seconds) => playerControlsRef.current?.seekTo(seconds)}
+                  onPauseVideo={() => playerControlsRef.current?.pause()}
                 />
               </TabsContent>
               
