@@ -4,6 +4,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
+import splashLogo from "@/assets/splash-logo.jpg";
 import AuthPage from "./pages/AuthPage";
 import HomePage from "./pages/HomePage";
 import LibraryPage from "./pages/LibraryPage";
@@ -20,8 +21,13 @@ function AppRoutes() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center" style={{ background: 'linear-gradient(180deg, #0a0a1a 0%, #0d1025 50%, #0a0a1a 100%)' }}>
+        <img
+          src={splashLogo}
+          alt="Memory Link"
+          className="w-full h-full object-cover animate-fade-in"
+          style={{ position: 'absolute', inset: 0 }}
+        />
       </div>
     );
   }
