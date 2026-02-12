@@ -282,11 +282,15 @@ export function TranscriptView({
   const lastTapRef = useRef<number>(0);
   const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleTranscriptTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
-    // Don't interfere with button clicks or active selections
+  const handleTranscriptTap = useCallback((e: React.MouseEvent) => {
+    // Don't interfere with button clicks
     const target = e.target as HTMLElement;
     if (target.closest('button')) return;
     
+    // Ignore if there's an active text selection
+    const sel = window.getSelection();
+    if (sel && !sel.isCollapsed && sel.toString().trim().length > 0) return;
+
     const now = Date.now();
     const timeSinceLastTap = now - lastTapRef.current;
     lastTapRef.current = now;
@@ -299,9 +303,8 @@ export function TranscriptView({
       // Single tap - pause (with delay to check for double tap)
       if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
       tapTimerRef.current = setTimeout(() => {
-        // Only pause if no text was selected by this tap
-        const sel = window.getSelection();
-        if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
+        const currentSel = window.getSelection();
+        if (!currentSel || currentSel.isCollapsed || currentSel.toString().trim().length === 0) {
           onPauseVideo?.();
         }
       }, 350);
@@ -505,6 +508,7 @@ export function TranscriptView({
           highlightMode && "select-text cursor-text",
           "pt-4 pb-32" // Safe padding zones to prevent handle overlap with sticky elements
         )}
+        onClick={handleTranscriptTap}
         style={{
           WebkitUserSelect: highlightMode ? 'text' : 'auto',
           userSelect: highlightMode ? 'text' : 'auto',
@@ -555,7 +559,7 @@ export function TranscriptView({
               >
                 {formatTimestamp(segment.start_seconds)}
               </button>
-              <span className="text-sm leading-snug flex-1" onClick={handleTranscriptTap}>
+              <span className="text-sm leading-snug flex-1">
                 {renderHighlightedText(segment)}
               </span>
             </div>
