@@ -19,24 +19,8 @@ const queryClient = new QueryClient();
 
 function AppRoutes() {
   const { user, loading, signIn, signUp, signOut } = useAuth();
-  const [showSplash, setShowSplash] = useState(true);
 
-  useEffect(() => {
-    const timer = setTimeout(() => setShowSplash(false), 5000);
-    return () => clearTimeout(timer);
-  }, []);
-
-  if (loading || showSplash) {
-    return (
-      <div className="min-h-screen animate-fade-in" style={{ 
-        backgroundImage: `url(${splashLogo})`,
-        backgroundSize: 'cover',
-        backgroundPosition: 'center',
-        backgroundRepeat: 'no-repeat',
-        backgroundColor: '#0a0a1a'
-      }} />
-    );
-  }
+  if (loading) return null;
 
   const handleAuth = async (email: string, password: string, isSignUp: boolean) => {
     if (isSignUp) {
@@ -72,18 +56,39 @@ function AppRoutes() {
   );
 }
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <AuthProvider>
-      <TooltipProvider>
-        <Toaster />
-        <Sonner />
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
-  </QueryClientProvider>
-);
+function App() {
+  const [showSplash, setShowSplash] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setShowSplash(false), 5000);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (showSplash) {
+    return (
+      <div className="min-h-screen animate-fade-in" style={{
+        backgroundImage: `url(${splashLogo})`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center',
+        backgroundRepeat: 'no-repeat',
+        backgroundColor: '#0a0a1a'
+      }} />
+    );
+  }
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <Toaster />
+          <Sonner />
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
