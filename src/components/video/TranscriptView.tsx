@@ -60,6 +60,7 @@ interface TranscriptViewProps {
   getCurrentTime?: () => number | null;
   onSeekTo?: (seconds: number) => void;
   onPauseVideo?: () => void;
+  onPlayVideo?: () => void;
 }
 
 interface SelectionState {
@@ -88,6 +89,7 @@ export function TranscriptView({
   getCurrentTime,
   onSeekTo,
   onPauseVideo,
+  onPlayVideo,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -275,6 +277,36 @@ export function TranscriptView({
   const handleQuickAddTodo = () => {
     onOpenTodoSheet(quickAdd.segmentText, quickAdd.segmentStart, quickAdd.segmentEnd);
   };
+
+  // Tap-to-pause / double-tap-to-play on transcript text
+  const lastTapRef = useRef<number>(0);
+  const tapTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleTranscriptTap = useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    // Don't interfere with button clicks or active selections
+    const target = e.target as HTMLElement;
+    if (target.closest('button')) return;
+    
+    const now = Date.now();
+    const timeSinceLastTap = now - lastTapRef.current;
+    lastTapRef.current = now;
+
+    if (timeSinceLastTap < 350) {
+      // Double tap - resume playing
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      onPlayVideo?.();
+    } else {
+      // Single tap - pause (with delay to check for double tap)
+      if (tapTimerRef.current) clearTimeout(tapTimerRef.current);
+      tapTimerRef.current = setTimeout(() => {
+        // Only pause if no text was selected by this tap
+        const sel = window.getSelection();
+        if (!sel || sel.isCollapsed || sel.toString().trim().length === 0) {
+          onPauseVideo?.();
+        }
+      }, 350);
+    }
+  }, [onPauseVideo, onPlayVideo]);
 
   // Render text with existing highlights marked - color only the matched text
   const renderHighlightedText = (segment: TranscriptSegment) => {
@@ -523,7 +555,7 @@ export function TranscriptView({
               >
                 {formatTimestamp(segment.start_seconds)}
               </button>
-              <span className="text-sm leading-snug flex-1">
+              <span className="text-sm leading-snug flex-1" onClick={handleTranscriptTap}>
                 {renderHighlightedText(segment)}
               </span>
             </div>

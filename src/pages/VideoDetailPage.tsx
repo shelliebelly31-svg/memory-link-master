@@ -377,6 +377,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   getCurrentTime={playerTimeRef.current || undefined}
                   onSeekTo={(seconds) => playerControlsRef.current?.seekTo(seconds)}
                   onPauseVideo={() => playerControlsRef.current?.pause()}
+                  onPlayVideo={() => playerControlsRef.current?.play()}
                 />
               </TabsContent>
               
