@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Plus, Link as LinkIcon, X, Loader2, FileText, Image, Upload } from 'lucide-react';
+import { Plus, Link as LinkIcon, X, Loader2, FileText, Image, Upload, Mic, Music } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -19,6 +19,7 @@ interface AddVideoDialogProps {
     youtube_url?: string;
     transcript_text?: string;
     screenshot_base64_list?: string[];
+    audio_file?: File;
   }) => Promise<void>;
   triggerButton?: React.ReactNode;
 }
@@ -29,8 +30,11 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
   const [transcriptText, setTranscriptText] = useState('');
   const [screenshots, setScreenshots] = useState<string[]>([]);
   const [screenshotPreviews, setScreenshotPreviews] = useState<string[]>([]);
+  const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [loadingStep, setLoadingStep] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -56,6 +60,23 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     });
   };
 
+  const handleAudioSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const maxSize = 20 * 1024 * 1024; // 20MB
+    if (file.size > maxSize) {
+      toast({
+        title: 'File too large',
+        description: 'Audio/video files must be under 20MB.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setAudioFile(file);
+  };
+
   const removeScreenshot = (index: number) => {
     setScreenshots((prev) => prev.filter((_, i) => i !== index));
     setScreenshotPreviews((prev) => prev.filter((_, i) => i !== index));
@@ -66,9 +87,10 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     setTranscriptText('');
     setScreenshots([]);
     setScreenshotPreviews([]);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    setAudioFile(null);
+    setLoadingStep('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+    if (audioInputRef.current) audioInputRef.current.value = '';
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -77,18 +99,17 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     const hasUrl = url.trim();
     const hasText = transcriptText.trim();
     const hasScreenshots = screenshots.length > 0;
+    const hasAudio = !!audioFile;
 
-    // Validation: at least one source required
-    if (!hasUrl && !hasText && !hasScreenshots) {
+    if (!hasUrl && !hasText && !hasScreenshots && !hasAudio) {
       toast({
         title: 'Input required',
-        description: 'Please provide a video link, paste transcript text, or upload screenshots',
+        description: 'Please provide a video link, audio file, transcript text, or screenshots',
         variant: 'destructive',
       });
       return;
     }
 
-    // URL validation if provided
     if (hasUrl) {
       const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
       if (!youtubeRegex.test(url)) {
@@ -102,15 +123,20 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     }
 
     setIsLoading(true);
+    setLoadingStep(hasAudio ? 'Uploading & transcribing...' : 'Adding...');
+    
     try {
       await onAddVideo({
         youtube_url: hasUrl ? url : undefined,
         transcript_text: hasText ? transcriptText : undefined,
         screenshot_base64_list: hasScreenshots ? screenshots : undefined,
+        audio_file: hasAudio ? audioFile : undefined,
       });
       toast({
         title: 'Video added!',
-        description: 'Your video is being processed. This may take a few minutes.',
+        description: hasAudio 
+          ? 'Your audio is being transcribed. This may take a minute.'
+          : 'Your video is being processed. This may take a few minutes.',
       });
       resetForm();
       setOpen(false);
@@ -122,6 +148,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
       });
     } finally {
       setIsLoading(false);
+      setLoadingStep('');
     }
   };
 
@@ -172,7 +199,67 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
             </div>
           </div>
 
-          {/* Transcript Text */}
+          {/* Audio/Video File Upload */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Mic className="h-4 w-4 text-muted-foreground" />
+              Upload Audio / Video
+              <span className="text-xs text-muted-foreground">(optional)</span>
+            </Label>
+            {audioFile ? (
+              <div className="flex items-center gap-3 p-3 bg-primary/5 border border-primary/20 rounded-lg">
+                <Music className="h-5 w-5 text-primary shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium truncate">{audioFile.name}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {(audioFile.size / (1024 * 1024)).toFixed(1)} MB
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon-sm"
+                  onClick={() => {
+                    setAudioFile(null);
+                    if (audioInputRef.current) audioInputRef.current.value = '';
+                  }}
+                  disabled={isLoading}
+                >
+                  <X className="h-4 w-4" />
+                </Button>
+              </div>
+            ) : (
+              <div
+                className={cn(
+                  "border-2 border-dashed rounded-lg p-4 text-center cursor-pointer transition-colors",
+                  "hover:border-primary/50 hover:bg-primary/5",
+                  isLoading && "pointer-events-none opacity-50"
+                )}
+                onClick={() => audioInputRef.current?.click()}
+              >
+                <Mic className="h-7 w-7 mx-auto text-muted-foreground mb-2" />
+                <p className="text-sm text-muted-foreground">
+                  Tap to upload audio or video file
+                </p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  MP3, MP4, WAV, M4A, MOV — up to 20MB
+                </p>
+                <p className="text-xs text-primary/70 mt-1 font-medium">
+                  ✨ Transcribed automatically with ElevenLabs
+                </p>
+              </div>
+            )}
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.mov,.webm,.ogg"
+              className="hidden"
+              onChange={handleAudioSelect}
+              disabled={isLoading}
+            />
+          </div>
+
+          {/* Paste Transcript */}
           <div className="space-y-2">
             <Label htmlFor="transcript" className="flex items-center gap-2">
               <FileText className="h-4 w-4 text-muted-foreground" />
@@ -222,7 +309,6 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               disabled={isLoading}
             />
             
-            {/* Screenshot previews */}
             {screenshotPreviews.length > 0 && (
               <div className="flex flex-wrap gap-2 mt-2">
                 {screenshotPreviews.map((preview, index) => (
@@ -252,8 +338,8 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
 
           {/* Helper text */}
           <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            💡 Provide at least one: a YouTube link, pasted transcript text, or screenshots. 
-            If the video has no captions, you'll be prompted to add the transcript manually.
+            💡 Provide at least one: a YouTube link, audio/video file, pasted transcript, or screenshots. 
+            Audio files are transcribed automatically using ElevenLabs.
           </p>
 
           <div className="flex gap-3 pt-2">
@@ -273,7 +359,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
               {isLoading ? (
                 <>
                   <Loader2 className="h-4 w-4 animate-spin" />
-                  Adding...
+                  {loadingStep || 'Adding...'}
                 </>
               ) : (
                 'Add Video'
