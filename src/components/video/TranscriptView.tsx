@@ -558,7 +558,7 @@ export function TranscriptView({
               <button
                 onClick={(e) => handlePlusClick(segment, e)}
                 className={cn(
-                  "shrink-0 w-5 h-5 rounded-full flex items-center justify-center select-none",
+                  "shrink-0 w-5 h-5 mt-0.5 rounded-full flex items-center justify-center select-none",
                   "border border-border/50 bg-background text-muted-foreground",
                   "hover:border-primary hover:text-primary hover:bg-primary/10",
                   "transition-colors opacity-0 group-hover:opacity-100",
@@ -569,17 +569,19 @@ export function TranscriptView({
               >
                 <Plus className="h-3 w-3" />
               </button>
-              <button
-                onClick={() => onSeekTo?.(segment.start_seconds)}
-                className="text-[11px] font-mono text-muted-foreground w-10 shrink-0 select-none tabular-nums hover:text-primary transition-colors cursor-pointer"
-                style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
-                aria-label={`Jump to ${formatTimestamp(segment.start_seconds)}`}
-              >
-                {formatTimestamp(segment.start_seconds)}
-              </button>
-              <span className="text-sm leading-snug flex-1">
-                {renderHighlightedText(segment)}
-              </span>
+              <div className="flex flex-col gap-0.5 flex-1 min-w-0">
+                <button
+                  onClick={() => onSeekTo?.(segment.start_seconds)}
+                  className="text-[10px] font-mono text-muted-foreground select-none tabular-nums hover:text-primary transition-colors cursor-pointer self-start"
+                  style={{ WebkitUserSelect: 'none', userSelect: 'none' }}
+                  aria-label={`Jump to ${formatTimestamp(Math.round(segment.start_seconds))}`}
+                >
+                  {formatTimestamp(Math.round(segment.start_seconds))}
+                </button>
+                <span className="text-sm leading-relaxed">
+                  {renderHighlightedText(segment)}
+                </span>
+              </div>
             </div>
           );
         })}
