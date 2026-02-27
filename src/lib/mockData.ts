@@ -181,7 +181,8 @@ export function formatDuration(seconds: number): string {
 }
 
 export function formatTimestamp(seconds: number): string {
-  const minutes = Math.floor(seconds / 60);
-  const secs = seconds % 60;
+  const totalSecs = Math.floor(seconds);
+  const minutes = Math.floor(totalSecs / 60);
+  const secs = totalSecs % 60;
   return `${minutes}:${secs.toString().padStart(2, '0')}`;
 }
