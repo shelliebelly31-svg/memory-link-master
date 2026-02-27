@@ -102,51 +102,84 @@ serve(async (req) => {
 
     console.log(`Transcribed ${words.length} words, full text length: ${fullText.length}`);
 
-    // Group words into ~15-second segments for transcript_segments
+    // Check if word timestamps are actually valid (not all zeros)
+    const hasValidTimestamps = words.length > 1 && words.some((w: any) => (w.start || 0) > 0 || (w.end || 0) > 0);
+    console.log(`Has valid timestamps: ${hasValidTimestamps}, words sample:`, JSON.stringify(words.slice(0, 3)));
+
     const segments: Array<{ start: number; end: number; text: string }> = [];
-    let currentSegment: { start: number; end: number; words: string[] } | null = null;
 
-    for (const word of words) {
-      const wordStart = word.start || 0;
-      const wordEnd = word.end || wordStart + 0.5;
-      const wordText = word.text || '';
+    if (hasValidTimestamps) {
+      // Group words into ~15-second segments using real timestamps
+      let currentSegment: { start: number; end: number; words: string[] } | null = null;
 
-      if (!currentSegment) {
-        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-      } else if (wordEnd - currentSegment.start >= 15) {
-        // Finalize current segment
+      for (const word of words) {
+        const wordStart = word.start || 0;
+        const wordEnd = word.end || wordStart + 0.5;
+        const wordText = word.text || '';
+
+        if (!currentSegment) {
+          currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+        } else if (wordEnd - currentSegment.start >= 15) {
+          segments.push({
+            start: currentSegment.start,
+            end: currentSegment.end,
+            text: currentSegment.words.join(' ').trim(),
+          });
+          currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+        } else {
+          currentSegment.end = wordEnd;
+          currentSegment.words.push(wordText);
+        }
+      }
+
+      if (currentSegment && currentSegment.words.length > 0) {
         segments.push({
           start: currentSegment.start,
           end: currentSegment.end,
           text: currentSegment.words.join(' ').trim(),
         });
-        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-      } else {
-        currentSegment.end = wordEnd;
-        currentSegment.words.push(wordText);
       }
     }
 
-    if (currentSegment && currentSegment.words.length > 0) {
-      segments.push({
-        start: currentSegment.start,
-        end: currentSegment.end,
-        text: currentSegment.words.join(' ').trim(),
-      });
-    }
+    // Fallback: split by sentences when no valid word timestamps
+    if (segments.length <= 1 && fullText.trim()) {
+      segments.length = 0; // clear any single giant segment
+      // Split on sentence boundaries (. ! ?) or after ~200 chars at a natural break
+      const sentences = fullText.match(/[^.!?]+[.!?]+/g) || [];
+      
+      // If no sentence punctuation found, split into ~200-char chunks at word boundaries
+      if (sentences.length <= 1) {
+        const words = fullText.split(/\s+/);
+        let chunk = '';
+        let chunkWords: string[] = [];
+        for (const w of words) {
+          if (chunk.length + w.length > 200 && chunkWords.length > 0) {
+            sentences.push(chunk.trim());
+            chunk = w;
+            chunkWords = [w];
+          } else {
+            chunk += (chunk ? ' ' : '') + w;
+            chunkWords.push(w);
+          }
+        }
+        if (chunk.trim()) sentences.push(chunk.trim());
+      }
 
-    // If no word-level timestamps, fall back to splitting by sentences
-    if (segments.length === 0 && fullText.trim()) {
-      const sentences = fullText.match(/[^.!?]+[.!?]+/g) || [fullText];
+      // Estimate timing: use audio duration if available, else ~150 words/min
+      const totalWords = fullText.split(/\s+/).length;
+      const estimatedDuration = totalWords / 2.5; // ~150 words/min = 2.5 words/sec
+      const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
       let currentTime = 0;
-      const avgDuration = 10;
+
       for (const sentence of sentences) {
+        const proportion = sentence.length / totalChars;
+        const duration = Math.max(2, estimatedDuration * proportion);
         segments.push({
-          start: currentTime,
-          end: currentTime + avgDuration,
+          start: Math.round(currentTime * 10) / 10,
+          end: Math.round((currentTime + duration) * 10) / 10,
           text: sentence.trim(),
         });
-        currentTime += avgDuration;
+        currentTime += duration;
       }
     }
 
