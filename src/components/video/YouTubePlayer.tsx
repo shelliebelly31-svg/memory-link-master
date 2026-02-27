@@ -46,6 +46,12 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef, onPlayerContro
     }
   }, []);
 
+  // Store callbacks in refs to avoid re-creating the player when they change
+  const onTimeRefRef = useRef(onTimeRef);
+  const onPlayerControlsRef = useRef(onPlayerControls);
+  useEffect(() => { onTimeRefRef.current = onTimeRef; }, [onTimeRef]);
+  useEffect(() => { onPlayerControlsRef.current = onPlayerControls; }, [onPlayerControls]);
+
   useEffect(() => {
     // Load YouTube IFrame API if not already loaded
     if (!window.YT) {
@@ -65,12 +71,8 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef, onPlayerContro
           },
           events: {
             onReady: () => {
-              if (onTimeRef) {
-                onTimeRef(getCurrentTime);
-              }
-              if (onPlayerControls) {
-                onPlayerControls({ seekTo, pause, play });
-              }
+              onTimeRefRef.current?.(getCurrentTime);
+              onPlayerControlsRef.current?.({ seekTo, pause, play });
             },
           },
         });
@@ -88,7 +90,7 @@ export function YouTubePlayer({ videoId, onTimeUpdate, onTimeRef, onPlayerContro
         playerRef.current.destroy();
       }
     };
-  }, [videoId, onTimeRef, onPlayerControls, getCurrentTime, seekTo, pause, play]);
+  }, [videoId, getCurrentTime, seekTo, pause, play]);
 
   // Report time ref after initial mount
   useEffect(() => {
