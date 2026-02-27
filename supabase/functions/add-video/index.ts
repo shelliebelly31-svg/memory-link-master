@@ -842,97 +842,240 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
 }
 
 async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+  // Try multiple methods in order of reliability
+  
+  // Method 1: Innertube API (most reliable)
   try {
-    const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
-    const response = await fetch(videoUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-      }
-    });
-    const html = await response.text();
-    
-    const captionMatch = html.match(/"captionTracks":\s*\[(.*?)\]/);
-    if (!captionMatch) {
-      console.log('No caption tracks found in page');
-      return [];
+    console.log('Method 1: Trying Innertube API for', youtubeId);
+    const innertubeResult = await fetchCaptionsViaInnertube(youtubeId);
+    if (innertubeResult.length > 0) {
+      console.log(`Innertube: Got ${innertubeResult.length} segments`);
+      return innertubeResult;
     }
+  } catch (e) {
+    console.error('Innertube method failed:', e);
+  }
 
-    let captionData;
-    try {
-      captionData = JSON.parse(`[${captionMatch[1]}]`);
-    } catch (e) {
-      console.error('Failed to parse caption data');
-      return [];
+  // Method 2: HTML scrape (original approach)
+  try {
+    console.log('Method 2: Trying HTML scrape for', youtubeId);
+    const htmlResult = await fetchCaptionsViaHtmlScrape(youtubeId);
+    if (htmlResult.length > 0) {
+      console.log(`HTML scrape: Got ${htmlResult.length} segments`);
+      return htmlResult;
     }
-    
-    if (!captionData.length) {
-      return [];
-    }
+  } catch (e) {
+    console.error('HTML scrape method failed:', e);
+  }
 
-    let captionTrack = captionData.find((t: any) => t.languageCode === 'en' && !t.kind) 
-      || captionData.find((t: any) => t.languageCode === 'en')
-      || captionData.find((t: any) => !t.kind)
-      || captionData[0];
-    
-    if (!captionTrack?.baseUrl) {
-      console.log('No valid caption track URL found');
-      return [];
+  // Method 3: Direct timedtext API
+  try {
+    console.log('Method 3: Trying direct timedtext API for', youtubeId);
+    const timedtextResult = await fetchCaptionsViaTimedtext(youtubeId);
+    if (timedtextResult.length > 0) {
+      console.log(`Timedtext: Got ${timedtextResult.length} segments`);
+      return timedtextResult;
     }
+  } catch (e) {
+    console.error('Timedtext method failed:', e);
+  }
 
-    const captionResponse = await fetch(captionTrack.baseUrl);
-    const captionXml = await captionResponse.text();
-    
-    const segments: Array<{start: number, end: number, text: string}> = [];
-    const textMatches = captionXml.matchAll(/<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([^<]*)<\/text>/g);
-    
-    for (const match of textMatches) {
-      const start = parseFloat(match[1]);
-      const duration = parseFloat(match[2]);
-      let text = match[3]
-        .replace(/&amp;/g, '&')
-        .replace(/&lt;/g, '<')
-        .replace(/&gt;/g, '>')
-        .replace(/&quot;/g, '"')
-        .replace(/&#39;/g, "'")
-        .replace(/\n/g, ' ')
-        .trim();
-      
-      if (text) {
-        segments.push({
-          start,
-          end: start + duration,
-          text,
-        });
-      }
-    }
+  console.log('All caption methods failed for', youtubeId);
+  return [];
+}
 
-    // Combine short segments
-    const combinedSegments: Array<{start: number, end: number, text: string}> = [];
-    let currentSegment: {start: number, end: number, text: string} | null = null;
-    
-    for (const seg of segments) {
-      if (!currentSegment) {
-        currentSegment = { ...seg };
-      } else if (currentSegment.end - currentSegment.start < 15 && seg.start - currentSegment.end < 2) {
-        currentSegment.end = seg.end;
-        currentSegment.text += ' ' + seg.text;
-      } else {
-        combinedSegments.push(currentSegment);
-        currentSegment = { ...seg };
-      }
-    }
-    
-    if (currentSegment) {
-      combinedSegments.push(currentSegment);
-    }
+// Method 1: Use YouTube's Innertube API
+async function fetchCaptionsViaInnertube(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+  const response = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+    body: JSON.stringify({
+      context: {
+        client: {
+          hl: 'en',
+          gl: 'US',
+          clientName: 'WEB',
+          clientVersion: '2.20240101.00.00',
+        },
+      },
+      videoId: youtubeId,
+    }),
+  });
 
-    console.log(`Parsed ${combinedSegments.length} transcript segments`);
-    return combinedSegments;
-
-  } catch (error) {
-    console.error('Error fetching captions:', error);
+  if (!response.ok) {
+    console.error('Innertube API returned:', response.status);
     return [];
   }
+
+  const data = await response.json();
+  const captions = data?.captions?.playerCaptionsTracklistRenderer?.captionTracks;
+  
+  if (!captions || captions.length === 0) {
+    console.log('No caption tracks in Innertube response');
+    return [];
+  }
+
+  // Prefer manual English, then auto English, then any
+  let track = captions.find((t: any) => t.languageCode === 'en' && t.kind !== 'asr')
+    || captions.find((t: any) => t.languageCode === 'en')
+    || captions.find((t: any) => t.kind !== 'asr')
+    || captions[0];
+
+  if (!track?.baseUrl) return [];
+
+  return await fetchAndParseCaptionXml(track.baseUrl);
+}
+
+// Method 2: Scrape HTML page for caption track URLs
+async function fetchCaptionsViaHtmlScrape(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+  const response = await fetch(videoUrl, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9',
+    }
+  });
+  const html = await response.text();
+  
+  // Try multiple regex patterns
+  const patterns = [
+    /"captionTracks":\s*(\[.*?\])/,
+    /captionTracks":\s*(\[.*?\])\s*,/,
+  ];
+
+  let captionData: any[] = [];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match) {
+      try {
+        captionData = JSON.parse(match[1]);
+        break;
+      } catch (e) {
+        continue;
+      }
+    }
+  }
+
+  if (captionData.length === 0) {
+    // Try extracting from ytInitialPlayerResponse
+    const playerMatch = html.match(/ytInitialPlayerResponse\s*=\s*(\{.*?\});/);
+    if (playerMatch) {
+      try {
+        const playerData = JSON.parse(playerMatch[1]);
+        captionData = playerData?.captions?.playerCaptionsTracklistRenderer?.captionTracks || [];
+      } catch (e) {
+        console.error('Failed to parse player response');
+      }
+    }
+  }
+  
+  if (captionData.length === 0) return [];
+
+  let track = captionData.find((t: any) => t.languageCode === 'en' && !t.kind) 
+    || captionData.find((t: any) => t.languageCode === 'en')
+    || captionData.find((t: any) => !t.kind)
+    || captionData[0];
+  
+  if (!track?.baseUrl) return [];
+
+  return await fetchAndParseCaptionXml(track.baseUrl);
+}
+
+// Method 3: Direct timedtext API (works for some videos with auto-captions)
+async function fetchCaptionsViaTimedtext(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+  const langs = ['en', 'en-US', 'en-GB'];
+  
+  for (const lang of langs) {
+    // Try auto-generated captions
+    const asr_url = `https://www.youtube.com/api/timedtext?v=${youtubeId}&lang=${lang}&kind=asr&fmt=srv3`;
+    try {
+      const response = await fetch(asr_url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      if (response.ok) {
+        const xml = await response.text();
+        if (xml.includes('<text')) {
+          const segments = parseCaptionXml(xml);
+          if (segments.length > 0) return combineShortSegments(segments);
+        }
+      }
+    } catch (e) { /* continue */ }
+
+    // Try manual captions
+    const manual_url = `https://www.youtube.com/api/timedtext?v=${youtubeId}&lang=${lang}&fmt=srv3`;
+    try {
+      const response = await fetch(manual_url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      if (response.ok) {
+        const xml = await response.text();
+        if (xml.includes('<text')) {
+          const segments = parseCaptionXml(xml);
+          if (segments.length > 0) return combineShortSegments(segments);
+        }
+      }
+    } catch (e) { /* continue */ }
+  }
+
+  return [];
+}
+
+// Shared: Fetch a caption URL and parse the XML
+async function fetchAndParseCaptionXml(url: string): Promise<Array<{start: number, end: number, text: string}>> {
+  const response = await fetch(url);
+  if (!response.ok) return [];
+  const xml = await response.text();
+  const segments = parseCaptionXml(xml);
+  return combineShortSegments(segments);
+}
+
+// Shared: Parse caption XML into segments
+function parseCaptionXml(xml: string): Array<{start: number, end: number, text: string}> {
+  const segments: Array<{start: number, end: number, text: string}> = [];
+  const textMatches = xml.matchAll(/<text start="([\d.]+)" dur="([\d.]+)"[^>]*>([\s\S]*?)<\/text>/g);
+  
+  for (const match of textMatches) {
+    const start = parseFloat(match[1]);
+    const duration = parseFloat(match[2]);
+    let text = match[3]
+      .replace(/&amp;/g, '&')
+      .replace(/&lt;/g, '<')
+      .replace(/&gt;/g, '>')
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/\n/g, ' ')
+      .trim();
+    
+    if (text) {
+      segments.push({ start, end: start + duration, text });
+    }
+  }
+  return segments;
+}
+
+// Shared: Combine short segments into longer ones
+function combineShortSegments(segments: Array<{start: number, end: number, text: string}>): Array<{start: number, end: number, text: string}> {
+  const combined: Array<{start: number, end: number, text: string}> = [];
+  let current: {start: number, end: number, text: string} | null = null;
+  
+  for (const seg of segments) {
+    if (!current) {
+      current = { ...seg };
+    } else if (current.end - current.start < 15 && seg.start - current.end < 2) {
+      current.end = seg.end;
+      current.text += ' ' + seg.text;
+    } else {
+      combined.push(current);
+      current = { ...seg };
+    }
+  }
+  if (current) combined.push(current);
+
+  console.log(`Combined into ${combined.length} segments`);
+  return combined;
 }
 
 async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
