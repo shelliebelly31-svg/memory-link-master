@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
+import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus } from 'lucide-react';
@@ -48,6 +49,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillTimestamp, setPrefillTimestamp] = useState<number | undefined>();
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
+  const [isResegmenting, setIsResegmenting] = useState(false);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -109,6 +111,31 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     setPrefillEndTimestamp(undefined);
     setAddTodoOpen(true);
   }, []);
+
+  const handleResegment = useCallback(async () => {
+    if (!id) return;
+    setIsResegmenting(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('re-segment-transcript', {
+        body: { video_id: id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: 'Transcript re-segmented',
+        description: `Split into ${data.new_count} segments`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+    } catch (err: any) {
+      toast({
+        title: 'Re-segment failed',
+        description: err.message || 'Something went wrong',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsResegmenting(false);
+    }
+  }, [id, queryClient, toast]);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
@@ -378,6 +405,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onSeekTo={(seconds) => playerControlsRef.current?.seekTo(seconds)}
                   onPauseVideo={() => playerControlsRef.current?.pause()}
                   onPlayVideo={() => playerControlsRef.current?.play()}
+                  onResegment={handleResegment}
+                  isResegmenting={isResegmenting}
                 />
               </TabsContent>
               

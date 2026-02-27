@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, MousePointer, Plus } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,8 @@ interface TranscriptViewProps {
   onSeekTo?: (seconds: number) => void;
   onPauseVideo?: () => void;
   onPlayVideo?: () => void;
+  onResegment?: () => Promise<void>;
+  isResegmenting?: boolean;
 }
 
 interface SelectionState {
@@ -90,6 +92,8 @@ export function TranscriptView({
   onSeekTo,
   onPauseVideo,
   onPlayVideo,
+  onResegment,
+  isResegmenting,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -458,6 +462,20 @@ export function TranscriptView({
             ? 'Select text or tap + to save' 
             : 'Normal scroll and copy behavior.'}
         </p>
+
+        {/* Re-segment button */}
+        {onResegment && segments.length <= 3 && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
+            onClick={onResegment}
+            disabled={isResegmenting}
+          >
+            <RefreshCw className={cn("h-3 w-3", isResegmenting && "animate-spin")} />
+            {isResegmenting ? 'Re-segmenting...' : 'Re-segment transcript into sentences'}
+          </Button>
+        )}
 
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
         <div className="flex gap-2 mt-3" style={{ pointerEvents: 'auto' }}>
