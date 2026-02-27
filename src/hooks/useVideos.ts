@@ -749,7 +749,89 @@ export function useAddVideoWithSources() {
       youtube_url?: string;
       transcript_text?: string;
       screenshot_base64_list?: string[];
+      audio_file?: File;
     }) => {
+      // If an audio file is provided, first create the video record, then transcribe
+      if (data.audio_file) {
+        // Step 1: Create video record via add-video with a placeholder
+        const createResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${session?.access_token}`,
+            },
+            body: JSON.stringify({
+              youtube_url: data.youtube_url,
+              transcript_text: undefined,
+              screenshot_base64_list: undefined,
+            }),
+          }
+        );
+
+        let videoId: string | null = null;
+
+        // If we have a YouTube URL, use the created video record
+        if (createResponse.ok) {
+          const result = await createResponse.json();
+          videoId = result?.video?.id;
+        }
+
+        // If no video was created (no URL provided), create a manual entry
+        if (!videoId) {
+          const manualResponse = await fetch(
+            `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
+            {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${session?.access_token}`,
+              },
+              body: JSON.stringify({
+                transcript_text: 'Processing audio upload...',
+              }),
+            }
+          );
+
+          if (!manualResponse.ok) {
+            const error = await manualResponse.json();
+            throw new Error(error.error || 'Failed to create video record');
+          }
+
+          const manualResult = await manualResponse.json();
+          videoId = manualResult?.video?.id;
+        }
+
+        if (!videoId) {
+          throw new Error('Failed to create video record');
+        }
+
+        // Step 2: Send audio to transcribe-audio function
+        const formData = new FormData();
+        formData.append('audio', data.audio_file);
+        formData.append('video_id', videoId);
+
+        const transcribeResponse = await fetch(
+          `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-audio`,
+          {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${session?.access_token}`,
+            },
+            body: formData,
+          }
+        );
+
+        if (!transcribeResponse.ok) {
+          const error = await transcribeResponse.json().catch(() => ({}));
+          throw new Error(error.error || `Transcription failed (${transcribeResponse.status})`);
+        }
+
+        return transcribeResponse.json();
+      }
+
+      // Standard flow (link, text, screenshots)
       const response = await fetch(
         `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/add-video`,
         {
@@ -758,7 +840,11 @@ export function useAddVideoWithSources() {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${session?.access_token}`,
           },
-          body: JSON.stringify(data),
+          body: JSON.stringify({
+            youtube_url: data.youtube_url,
+            transcript_text: data.transcript_text,
+            screenshot_base64_list: data.screenshot_base64_list,
+          }),
         }
       );
 
