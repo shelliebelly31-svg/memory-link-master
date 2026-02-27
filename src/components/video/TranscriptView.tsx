@@ -463,8 +463,8 @@ export function TranscriptView({
             : 'Normal scroll and copy behavior.'}
         </p>
 
-        {/* Re-segment button */}
-        {onResegment && segments.length <= 3 && (
+        {/* Re-segment button - always available */}
+        {onResegment && (
           <Button
             variant="outline"
             size="sm"
