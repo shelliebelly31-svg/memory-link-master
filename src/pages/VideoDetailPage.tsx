@@ -46,6 +46,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [addReminderOpen, setAddReminderOpen] = useState(false);
   const [addTodoOpen, setAddTodoOpen] = useState(false);
   const [prefillTitle, setPrefillTitle] = useState<string | undefined>();
+  const [originalSelectedText, setOriginalSelectedText] = useState<string | undefined>();
   const [prefillTimestamp, setPrefillTimestamp] = useState<number | undefined>();
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
@@ -84,6 +85,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   // Handler for opening reminder sheet from transcript selection
   const handleOpenReminderFromSelection = useCallback((text: string, timestamp: number, endTimestamp?: number) => {
     setPrefillTitle(text);
+    setOriginalSelectedText(text);
     setPrefillTimestamp(timestamp);
     setPrefillEndTimestamp(endTimestamp);
     setAddReminderOpen(true);
@@ -92,6 +94,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   // Handler for opening todo sheet from transcript selection
   const handleOpenTodoFromSelection = useCallback((text: string, timestamp: number, endTimestamp?: number) => {
     setPrefillTitle(text);
+    setOriginalSelectedText(text);
     setPrefillTimestamp(timestamp);
     setPrefillEndTimestamp(endTimestamp);
     setAddTodoOpen(true);
@@ -100,6 +103,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   // Clear prefill when manually opening sheets
   const handleOpenReminderManual = useCallback(() => {
     setPrefillTitle(undefined);
+    setOriginalSelectedText(undefined);
     setPrefillTimestamp(undefined);
     setPrefillEndTimestamp(undefined);
     setAddReminderOpen(true);
@@ -107,6 +111,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
 
   const handleOpenTodoManual = useCallback(() => {
     setPrefillTitle(undefined);
+    setOriginalSelectedText(undefined);
     setPrefillTimestamp(undefined);
     setPrefillEndTimestamp(undefined);
     setAddTodoOpen(true);
@@ -460,6 +465,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         prefillTitle={prefillTitle}
         prefillTimestamp={prefillTimestamp}
         prefillEndTimestamp={prefillEndTimestamp}
+        originalSelectedText={originalSelectedText}
       />
       <AddTodoSheet
         open={addTodoOpen}
@@ -470,6 +476,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         prefillTitle={prefillTitle}
         prefillTimestamp={prefillTimestamp}
         prefillEndTimestamp={prefillEndTimestamp}
+        originalSelectedText={originalSelectedText}
       />
       <MilestoneDialog
         open={milestoneCount !== null}

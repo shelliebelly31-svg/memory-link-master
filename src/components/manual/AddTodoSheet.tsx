@@ -24,6 +24,7 @@ interface AddTodoSheetProps {
   prefillTitle?: string;
   prefillTimestamp?: number;
   prefillEndTimestamp?: number;
+  originalSelectedText?: string;
 }
 
 export function AddTodoSheet({
@@ -35,6 +36,7 @@ export function AddTodoSheet({
   prefillTitle,
   prefillTimestamp,
   prefillEndTimestamp,
+  originalSelectedText,
 }: AddTodoSheetProps) {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
@@ -113,6 +115,7 @@ export function AddTodoSheet({
         timestamp_seconds: timestampSeconds ?? undefined,
         end_timestamp_seconds: endTimestampSeconds ?? undefined,
         due_date: dueDate || undefined,
+        original_selected_text: originalSelectedText,
       },
       {
         onSuccess: () => {
