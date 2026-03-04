@@ -51,6 +51,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [isResegmenting, setIsResegmenting] = useState(false);
+  const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -141,6 +142,34 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
       setIsResegmenting(false);
     }
   }, [id, queryClient, toast]);
+
+  const handleRefetchCaptions = useCallback(async () => {
+    if (!id || !video) return;
+    setIsRefetchingCaptions(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('add-video', {
+        body: { retry_video_id: id, retry_from_step: 'captions' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: 'Captions re-fetched',
+        description: 'YouTube captions with accurate timestamps have been loaded. Refreshing...',
+      });
+      // Wait a moment for the background processing to complete
+      await new Promise(resolve => setTimeout(resolve, 3000));
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['video', id] });
+    } catch (err: any) {
+      toast({
+        title: 'Re-fetch failed',
+        description: err.message || 'Could not fetch YouTube captions. The video may not have captions available.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsRefetchingCaptions(false);
+    }
+  }, [id, video, queryClient, toast]);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
@@ -412,6 +441,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onPlayVideo={() => playerControlsRef.current?.play()}
                   onResegment={handleResegment}
                   isResegmenting={isResegmenting}
+                  onRefetchCaptions={handleRefetchCaptions}
+                  isRefetchingCaptions={isRefetchingCaptions}
+                  hasYoutubeId={!!(video.youtube_id && !video.youtube_id.startsWith('manual-'))}
                 />
               </TabsContent>
               
