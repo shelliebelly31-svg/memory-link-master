@@ -931,51 +931,12 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
     return [];
   }
 
-  // Filter out YouTube description/metadata patterns
-  const metadataPatterns = [
-    /^\*\*Visibility\*\*.*$/mi,
-    /^\*\*Uploaded by\*\*.*$/mi,
-    /^\*\*Uploaded at\*\*.*$/mi,
-    /^\*\*Published at\*\*.*$/mi,
-    /^\*\*Length\*\*.*$/mi,
-    /^\*\*Views\*\*.*$/mi,
-    /^\*\*Likes\*\*.*$/mi,
-    /^\*\*Category\*\*.*$/mi,
-    /^Copyright\s*©.*$/mi,
-    /^```[\s\S]*?```/gm,
-    /https?:\/\/\S+/g,
-  ];
-
-  // Check if a paragraph is likely YouTube metadata/description rather than spoken content
-  function isMetadataBlock(text: string): boolean {
-    const lower = text.toLowerCase();
-    // YouTube description indicators
-    if (lower.includes('visibility') && lower.includes('uploaded by')) return true;
-    if (lower.includes('subscribe') && lower.includes('channel')) return true;
-    if (lower.includes('copyright ©')) return true;
-    if (lower.includes('information shared here is for educational purposes')) return true;
-    if (lower.includes('your results may vary')) return true;
-    // Short metadata lines
-    if (text.length < 30 && (lower.includes('views') || lower.includes('likes') || lower.includes('category'))) return true;
-    // Code blocks (often contain description metadata)
-    if (text.startsWith('```') || text.endsWith('```')) return true;
-    // Lines that are mostly URLs
-    const urlCount = (text.match(/https?:\/\/\S+/g) || []).length;
-    const wordCount = text.split(/\s+/).length;
-    if (urlCount > 0 && urlCount / wordCount > 0.3) return true;
-    return false;
-  }
-
   // Parse the markdown content into transcript-like segments
+  // Split by paragraphs and assign approximate timestamps
   const paragraphs = markdown
     .split(/\n\n+/)
     .map((p: string) => p.replace(/\n/g, ' ').trim())
-    .filter((p: string) => {
-      if (p.length < 20) return false;
-      if (p.startsWith('#') || p.startsWith('[') || p.startsWith('!')) return false;
-      if (isMetadataBlock(p)) return false;
-      return true;
-    });
+    .filter((p: string) => p.length > 20 && !p.startsWith('#') && !p.startsWith('[') && !p.startsWith('!'));
 
   if (paragraphs.length === 0) return [];
 
@@ -984,17 +945,10 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
   const avgSegmentDuration = 30; // approximate 30s per paragraph
 
   for (const para of paragraphs) {
-    // Clean remaining metadata artifacts from text
-    let cleanText = para;
-    for (const pattern of metadataPatterns) {
-      cleanText = cleanText.replace(pattern, '').trim();
-    }
-    if (cleanText.length < 15) continue;
-    
     segments.push({
       start: currentTime,
       end: currentTime + avgSegmentDuration,
-      text: cleanText,
+      text: para,
     });
     currentTime += avgSegmentDuration;
   }
