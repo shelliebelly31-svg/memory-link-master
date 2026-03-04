@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Clock, Calendar, Phone, Check, Loader2 } from 'lucide-react';
+import { MessageSquare, Clock, Calendar, Phone, Check, Loader2, Send } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -12,6 +12,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { CombinedReminder, useUserProfile, useUpdateUserProfile, useCreateReminderSchedule } from '@/hooks/useHomeData';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface TextMeDialogProps {
   open: boolean;
@@ -220,8 +222,32 @@ export function TextMeDialog({ open, onOpenChange, reminder }: TextMeDialogProps
               </div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-col">
               <Button 
+                className="w-full"
+                onClick={async () => {
+                  if (!reminder) return;
+                  try {
+                    const { data, error } = await supabase.functions.invoke('send-sms', {
+                      body: {
+                        phone_number: phoneNumber,
+                        message: `🔔 Reminder: ${reminder.summary}`,
+                      },
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    toast.success('Text sent!');
+                    onOpenChange(false);
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to send text');
+                  }
+                }}
+              >
+                <Send className="h-4 w-4" />
+                Send Now
+              </Button>
+              <Button 
+                variant="outline"
                 className="w-full"
                 onClick={handleSchedule}
                 disabled={!canSchedule || createReminder.isPending}

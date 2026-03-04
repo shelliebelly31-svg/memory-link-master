@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { MessageSquare, Clock, Calendar, Phone, Check, Loader2, Repeat } from 'lucide-react';
+import { MessageSquare, Clock, Calendar, Phone, Check, Loader2, Repeat, Send } from 'lucide-react';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +15,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { TaskWithVideo, useUserProfile, useUpdateUserProfile } from '@/hooks/useHomeData';
 import { useCreateTaskReminder } from '@/hooks/useTaskReminders';
 import { cn } from '@/lib/utils';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface TextMeTaskDialogProps {
   open: boolean;
@@ -278,8 +280,32 @@ export function TextMeTaskDialog({ open, onOpenChange, task }: TextMeTaskDialogP
               </div>
             )}
 
-            <DialogFooter>
+            <DialogFooter className="flex flex-col gap-2 sm:flex-col">
               <Button 
+                className="w-full"
+                onClick={async () => {
+                  if (!task) return;
+                  try {
+                    const { data, error } = await supabase.functions.invoke('send-sms', {
+                      body: {
+                        phone_number: phoneNumber,
+                        message: `📋 Task Reminder: ${task.title}${task.description ? '\n' + task.description : ''}`,
+                      },
+                    });
+                    if (error) throw error;
+                    if (data?.error) throw new Error(data.error);
+                    toast.success('Text sent!');
+                    onOpenChange(false);
+                  } catch (err: any) {
+                    toast.error(err.message || 'Failed to send text');
+                  }
+                }}
+              >
+                <Send className="h-4 w-4" />
+                Send Now
+              </Button>
+              <Button 
+                variant="outline"
                 className="w-full"
                 onClick={handleSchedule}
                 disabled={!canSchedule || createReminder.isPending}
