@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   CheckSquare, Circle, CheckCircle2, Calendar, ExternalLink, 
-  Pencil, Trash2, MessageSquare, Search, Loader2, Plus 
+  Pencil, Trash2, Search, Loader2, Plus 
 } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,7 @@ import {
 import { TaskWithVideo, useAllTasks, useUpdateTaskStatusGlobal } from '@/hooks/useHomeData';
 import { useUpdateTask, useDeleteTask, useUpdateTaskChecklist, ChecklistItem } from '@/hooks/useItemMutations';
 import { EditTaskSheet } from '@/components/video/EditTaskSheet';
-import { TextMeTaskDialog } from '@/components/todo/TextMeTaskDialog';
+
 import { AddTodoDialog } from '@/components/manual/AddTodoDialog';
 import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import { cn } from '@/lib/utils';
@@ -53,7 +53,7 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [editTask, setEditTask] = useState<TaskWithVideo | null>(null);
   const [deleteTaskId, setDeleteTaskId] = useState<string | null>(null);
-  const [textMeTask, setTextMeTask] = useState<TaskWithVideo | null>(null);
+  
   const [addTodoOpen, setAddTodoOpen] = useState(false);
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const { data: allTasks = [], isLoading } = useAllTasks();
@@ -300,15 +300,8 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
                           <ExternalLink className="h-4 w-4" />
                           Video
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => setTextMeTask(task)}
-                          className="gap-1.5 ml-auto"
-                        >
-                          <MessageSquare className="h-4 w-4" />
-                          Text Me
-                        </Button>
+
+
                       </>
                     )}
                   </div>
@@ -362,12 +355,8 @@ export default function TodoPage({ onLogout }: TodoPageProps) {
         </AlertDialogContent>
       </AlertDialog>
 
-      {/* Text Me Dialog */}
-      <TextMeTaskDialog
-        open={!!textMeTask}
-        onOpenChange={(o) => !o && setTextMeTask(null)}
-        task={textMeTask}
-      />
+
+
 
       {/* Add Todo Dialog */}
       <AddTodoDialog
