@@ -28,6 +28,7 @@ interface AddReminderSheetProps {
   prefillTitle?: string;
   prefillTimestamp?: number;
   prefillEndTimestamp?: number;
+  originalSelectedText?: string;
 }
 
 const WEEKDAYS = [
@@ -49,6 +50,7 @@ export function AddReminderSheet({
   prefillTitle,
   prefillTimestamp,
   prefillEndTimestamp,
+  originalSelectedText,
 }: AddReminderSheetProps) {
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
@@ -177,6 +179,7 @@ export function AddReminderSheet({
         video_id: videoId,
         timestamp_seconds: timestampSeconds ?? undefined,
         end_timestamp_seconds: endTimestampSeconds ?? undefined,
+        original_selected_text: originalSelectedText,
         schedule_at: sendAt,
         repeat_type: repeatType,
         repeat_days: repeatType === 'custom_days' ? selectedDays : undefined,

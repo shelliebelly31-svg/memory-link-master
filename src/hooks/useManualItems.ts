@@ -69,6 +69,7 @@ export function useCreateManualReminder() {
       video_id?: string;
       timestamp_seconds?: number;
       end_timestamp_seconds?: number;
+      original_selected_text?: string;
       schedule_at?: Date;
       repeat_type?: RepeatType;
       repeat_days?: number[];
@@ -86,7 +87,7 @@ export function useCreateManualReminder() {
           type: 'remember' as const,
           start_seconds: timestampSeconds,
           end_seconds: endTimestampSeconds,
-          selected_text: data.title,
+          selected_text: data.original_selected_text || data.title,
         })
         .select()
         .single();
@@ -187,6 +188,7 @@ export function useCreateManualTask() {
       timestamp_seconds?: number;
       end_timestamp_seconds?: number;
       due_date?: string;
+      original_selected_text?: string;
     }) => {
       const timestampSeconds = data.timestamp_seconds ?? 0;
       const endTimestampSeconds = data.end_timestamp_seconds ?? timestampSeconds + 1;
@@ -202,7 +204,7 @@ export function useCreateManualTask() {
             type: 'todo' as const,
             start_seconds: timestampSeconds,
             end_seconds: endTimestampSeconds,
-            selected_text: data.title,
+            selected_text: data.original_selected_text || data.title,
           })
           .select()
           .single();
