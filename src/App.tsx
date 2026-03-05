@@ -22,13 +22,19 @@ function AppRoutes() {
 
   if (loading) return null;
 
-  const handleAuth = async (email: string, password: string, isSignUp: boolean) => {
+  const handleAuth = async (email: string, password: string, isSignUp: boolean, rememberMe: boolean) => {
     if (isSignUp) {
       const { error } = await signUp(email, password);
       if (error) throw error;
     } else {
       const { error } = await signIn(email, password);
       if (error) throw error;
+      // If not "remember me", flag for session-only persistence
+      if (!rememberMe) {
+        sessionStorage.setItem('session_only', 'true');
+      } else {
+        sessionStorage.removeItem('session_only');
+      }
     }
   };
 
