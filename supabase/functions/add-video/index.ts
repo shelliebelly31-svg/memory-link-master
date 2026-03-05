@@ -647,7 +647,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
-      const transcript = await fetchYouTubeCaptions(youtubeId);
+      const captionResult = await fetchYouTubeCaptions(youtubeId);
+      const transcript = captionResult.segments;
       
       if (!transcript || transcript.length === 0) {
         // Captions not found - set to needs_attention instead of failed
@@ -711,6 +712,14 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         .eq('id', videoId);
 
       console.log('Transcript saved with', segments.length, 'segments');
+
+      // If Firecrawl was used, timestamps are estimated - try to fix them with ElevenLabs audio transcription
+      if (captionResult.method === 'firecrawl') {
+        console.log('Firecrawl was used - attempting ElevenLabs audio timestamp correction...');
+        correctTimestampsViaAudio(videoId, youtubeId, transcript, supabase).catch(e => 
+          console.error('ElevenLabs timestamp correction failed (non-fatal):', e)
+        );
+      }
     }
 
     // Step 3: Generate AI suggestions
@@ -841,7 +850,12 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
   }
 }
 
-async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+interface CaptionResult {
+  segments: Array<{start: number, end: number, text: string}>;
+  method: 'innertube' | 'html_scrape' | 'timedtext' | 'firecrawl' | 'none';
+}
+
+async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
   // Try multiple methods in order of reliability
   
   // Method 1: Innertube API (most reliable)
@@ -850,7 +864,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     const innertubeResult = await fetchCaptionsViaInnertube(youtubeId);
     if (innertubeResult.length > 0) {
       console.log(`Innertube: Got ${innertubeResult.length} segments`);
-      return innertubeResult;
+      return { segments: innertubeResult, method: 'innertube' };
     }
   } catch (e) {
     console.error('Innertube method failed:', e);
@@ -862,7 +876,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     const htmlResult = await fetchCaptionsViaHtmlScrape(youtubeId);
     if (htmlResult.length > 0) {
       console.log(`HTML scrape: Got ${htmlResult.length} segments`);
-      return htmlResult;
+      return { segments: htmlResult, method: 'html_scrape' };
     }
   } catch (e) {
     console.error('HTML scrape method failed:', e);
@@ -874,7 +888,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     const timedtextResult = await fetchCaptionsViaTimedtext(youtubeId);
     if (timedtextResult.length > 0) {
       console.log(`Timedtext: Got ${timedtextResult.length} segments`);
-      return timedtextResult;
+      return { segments: timedtextResult, method: 'timedtext' };
     }
   } catch (e) {
     console.error('Timedtext method failed:', e);
@@ -888,7 +902,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
       const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
       if (firecrawlResult.length > 0) {
         console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
-        return firecrawlResult;
+        return { segments: firecrawlResult, method: 'firecrawl' };
       }
     } else {
       console.log('Firecrawl not configured, skipping Method 4');
@@ -898,7 +912,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
   }
 
   console.log('All caption methods failed for', youtubeId);
-  return [];
+  return { segments: [], method: 'none' };
 }
 
 // Method 4: Use Firecrawl to scrape YouTube page content, then AI to extract only spoken words
@@ -1230,6 +1244,180 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 
   console.log(`Combined into ${combined.length} segments`);
   return combined;
+}
+
+// Correct estimated timestamps by downloading audio and transcribing with ElevenLabs
+async function correctTimestampsViaAudio(
+  videoId: string, 
+  youtubeId: string, 
+  firecrawlSegments: Array<{start: number, end: number, text: string}>,
+  supabase: any
+) {
+  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+  if (!ELEVENLABS_API_KEY) {
+    console.log('No ELEVENLABS_API_KEY, skipping timestamp correction');
+    return;
+  }
+
+  try {
+    // Step 1: Download audio via Cobalt API
+    console.log('Downloading audio for timestamp correction via Cobalt...');
+    
+    const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+      method: 'POST',
+      headers: {
+        'Accept': 'application/json',
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://www.youtube.com/watch?v=${youtubeId}`,
+        downloadMode: 'audio',
+        audioFormat: 'mp3',
+        audioBitrate: '64',
+      }),
+    });
+
+    if (!cobaltResponse.ok) {
+      const errText = await cobaltResponse.text();
+      console.error('Cobalt API error:', cobaltResponse.status, errText);
+      return;
+    }
+
+    const cobaltData = await cobaltResponse.json();
+    
+    if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
+      console.error('Cobalt did not return a download URL:', cobaltData.status);
+      return;
+    }
+
+    console.log('Cobalt returned download URL, fetching audio...');
+
+    // Step 2: Download the actual audio file
+    const audioResponse = await fetch(cobaltData.url);
+    if (!audioResponse.ok) {
+      console.error('Audio download failed:', audioResponse.status);
+      return;
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    const audioSizeMB = audioBuffer.byteLength / (1024 * 1024);
+    console.log(`Audio downloaded: ${audioSizeMB.toFixed(1)}MB`);
+
+    // ElevenLabs has a 25MB limit
+    if (audioBuffer.byteLength > 25 * 1024 * 1024) {
+      console.log('Audio too large for ElevenLabs (>25MB), skipping timestamp correction');
+      return;
+    }
+
+    // Step 3: Send to ElevenLabs Scribe v2 for word-level timestamps
+    console.log('Sending audio to ElevenLabs for transcription...');
+    
+    const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'audio.mp3');
+    formData.append('model_id', 'scribe_v2');
+    formData.append('tag_audio_events', 'false');
+    formData.append('diarize', 'false');
+    formData.append('timestamps_granularity', 'word');
+
+    const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+      method: 'POST',
+      headers: {
+        'xi-api-key': ELEVENLABS_API_KEY,
+      },
+      body: formData,
+    });
+
+    if (!sttResponse.ok) {
+      const errText = await sttResponse.text();
+      console.error('ElevenLabs STT error:', sttResponse.status, errText);
+      return;
+    }
+
+    const sttData = await sttResponse.json();
+    const words = sttData.words || [];
+    
+    if (!words.length || !words.some((w: any) => (w.start || 0) > 0 || (w.end || 0) > 0)) {
+      console.log('ElevenLabs returned no valid word timestamps, skipping correction');
+      return;
+    }
+
+    console.log(`ElevenLabs returned ${words.length} words with timestamps`);
+
+    // Step 4: Build corrected segments by grouping words into ~15-second segments
+    const correctedSegments: Array<{start: number, end: number, text: string}> = [];
+    let currentSegment: { start: number; end: number; words: string[] } | null = null;
+
+    for (const word of words) {
+      const wordStart = word.start || 0;
+      const wordEnd = word.end || wordStart + 0.5;
+      const wordText = (word.text || '').trim();
+      if (!wordText) continue;
+
+      if (!currentSegment) {
+        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+      } else if (wordEnd - currentSegment.start >= 15) {
+        correctedSegments.push({
+          start: Math.round(currentSegment.start * 10) / 10,
+          end: Math.round(currentSegment.end * 10) / 10,
+          text: currentSegment.words.join(' ').trim(),
+        });
+        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+      } else {
+        currentSegment.end = wordEnd;
+        currentSegment.words.push(wordText);
+      }
+    }
+
+    if (currentSegment && currentSegment.words.length > 0) {
+      correctedSegments.push({
+        start: Math.round(currentSegment.start * 10) / 10,
+        end: Math.round(currentSegment.end * 10) / 10,
+        text: currentSegment.words.join(' ').trim(),
+      });
+    }
+
+    if (correctedSegments.length === 0) {
+      console.log('No corrected segments produced, keeping Firecrawl timestamps');
+      return;
+    }
+
+    // Step 5: Replace transcript segments in database
+    console.log(`Replacing ${firecrawlSegments.length} estimated segments with ${correctedSegments.length} accurately-timed segments`);
+
+    await supabase
+      .from('transcript_segments')
+      .delete()
+      .eq('video_id', videoId);
+
+    const segmentRows = correctedSegments.map(seg => ({
+      video_id: videoId,
+      start_seconds: seg.start,
+      end_seconds: seg.end,
+      text: seg.text,
+    }));
+
+    const { error: insertError } = await supabase
+      .from('transcript_segments')
+      .insert(segmentRows);
+
+    if (insertError) {
+      console.error('Failed to insert corrected segments:', insertError);
+      return;
+    }
+
+    // Update video duration from accurate timestamps
+    const accurateDuration = Math.ceil(correctedSegments[correctedSegments.length - 1].end);
+    await supabase
+      .from('videos')
+      .update({ duration_seconds: accurateDuration })
+      .eq('id', videoId);
+
+    console.log(`Timestamp correction complete! ${correctedSegments.length} segments with accurate timestamps saved.`);
+
+  } catch (error) {
+    console.error('Error in correctTimestampsViaAudio:', error);
+  }
 }
 
 async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
