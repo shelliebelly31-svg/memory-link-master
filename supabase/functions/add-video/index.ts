@@ -901,7 +901,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
   return [];
 }
 
-// Method 4: Use Firecrawl to scrape YouTube page content
+// Method 4: Use Firecrawl to scrape YouTube page content, then AI to extract only spoken words
 async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Promise<Array<{start: number, end: number, text: string}>> {
   const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
   
@@ -915,6 +915,7 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
       url: videoUrl,
       formats: ['markdown'],
       onlyMainContent: true,
+      waitFor: 3000,
     }),
   });
 
@@ -931,34 +932,96 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
     return [];
   }
 
-  // Parse the markdown content into transcript-like segments
-  // Split by paragraphs and assign approximate timestamps
-  const paragraphs = markdown
-    .split(/\n\n+/)
-    .map((p: string) => p.replace(/\n/g, ' ').trim())
-    .filter((p: string) => p.length > 20 && !p.startsWith('#') && !p.startsWith('[') && !p.startsWith('!'));
+  // Use AI to extract only the spoken transcript, filtering out title, description, metadata
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('No LOVABLE_API_KEY, cannot clean Firecrawl content');
+    return [];
+  }
 
-  if (paragraphs.length === 0) return [];
+  try {
+    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a transcript extractor. Given scraped YouTube page content, extract ONLY the spoken words/transcript from the video. 
+Remove ALL of the following:
+- Video title and description
+- Channel name, subscriber counts, view counts
+- Links, URLs, hashtags
+- Comments section
+- Related video suggestions
+- Upload dates, like counts
+- Any metadata or navigation elements
+- Copyright notices
 
-  const segments: Array<{start: number, end: number, text: string}> = [];
-  let currentTime = 0;
-  const avgSegmentDuration = 30; // approximate 30s per paragraph
-
-  for (const para of paragraphs) {
-    segments.push({
-      start: currentTime,
-      end: currentTime + avgSegmentDuration,
-      text: para,
+Return ONLY the actual spoken words as a clean transcript. Split into natural paragraphs (one paragraph per topic shift or every ~30 seconds of speech). 
+Return as a JSON object with a "paragraphs" array of strings. Each string should be one paragraph of spoken content.
+If you cannot identify any spoken transcript content, return {"paragraphs": []}.`
+          },
+          {
+            role: 'user',
+            content: `Extract the spoken transcript from this YouTube page content:\n\n${markdown.slice(0, 15000)}`
+          }
+        ],
+        response_format: { type: 'json_object' },
+      }),
     });
-    currentTime += avgSegmentDuration;
-  }
 
-  // Update end times
-  for (let i = 0; i < segments.length - 1; i++) {
-    segments[i].end = segments[i + 1].start;
-  }
+    if (!aiResponse.ok) {
+      console.error('AI cleanup failed:', aiResponse.status);
+      return [];
+    }
 
-  return segments;
+    const aiResult = await aiResponse.json();
+    const content = aiResult.choices?.[0]?.message?.content;
+    if (!content) return [];
+
+    let parsed;
+    try {
+      parsed = JSON.parse(content);
+    } catch (e) {
+      console.error('Failed to parse AI transcript response');
+      return [];
+    }
+
+    const paragraphs: string[] = parsed.paragraphs || [];
+    if (paragraphs.length === 0) return [];
+
+    // Estimate total duration: ~150 words per minute of speech
+    const totalWords = paragraphs.reduce((sum, p) => sum + p.split(/\s+/).length, 0);
+    const estimatedDurationSeconds = Math.max(60, (totalWords / 150) * 60);
+
+    const segments: Array<{start: number, end: number, text: string}> = [];
+    let wordsSoFar = 0;
+
+    for (const para of paragraphs) {
+      const paraWords = para.split(/\s+/).length;
+      const startTime = Math.round((wordsSoFar / totalWords) * estimatedDurationSeconds);
+      wordsSoFar += paraWords;
+      const endTime = Math.round((wordsSoFar / totalWords) * estimatedDurationSeconds);
+
+      segments.push({
+        start: startTime,
+        end: endTime,
+        text: para.trim(),
+      });
+    }
+
+    console.log(`Firecrawl+AI: Extracted ${segments.length} clean segments (~${Math.round(estimatedDurationSeconds)}s estimated)`);
+    return segments;
+
+  } catch (e) {
+    console.error('AI transcript extraction failed:', e);
+    return [];
+  }
 }
 
 // Method 1: Use YouTube's Innertube API
