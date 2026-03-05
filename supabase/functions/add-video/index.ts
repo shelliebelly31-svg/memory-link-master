@@ -921,7 +921,8 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
         url: videoUrl,
         formats: ['markdown'],
         onlyMainContent: false,
-        waitFor: 8000,
+        waitFor: 5000,
+        timeout: 60000,
       }),
       signal: controller.signal,
     });
