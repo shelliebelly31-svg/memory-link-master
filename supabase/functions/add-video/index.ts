@@ -905,19 +905,32 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
 async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Promise<Array<{start: number, end: number, text: string}>> {
   const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
   
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: videoUrl,
-      formats: ['markdown'],
-      onlyMainContent: true,
-      waitFor: 3000,
-    }),
-  });
+  // Use AbortController for a 45-second timeout
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+  let response: Response;
+  try {
+    response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: videoUrl,
+        formats: ['markdown'],
+        onlyMainContent: false,
+        waitFor: 8000,
+      }),
+      signal: controller.signal,
+    });
+  } catch (e) {
+    clearTimeout(timeoutId);
+    console.error('Firecrawl fetch error (timeout or network):', e);
+    return [];
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     console.error('Firecrawl API error:', response.status);
