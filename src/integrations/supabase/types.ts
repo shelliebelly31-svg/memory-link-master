@@ -554,6 +554,7 @@ export type Database = {
           status: Database["public"]["Enums"]["video_status"]
           thumbnail_url: string | null
           title: string
+          transcript_source: string | null
           updated_at: string
           user_id: string
           youtube_id: string
@@ -573,6 +574,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
           title?: string
+          transcript_source?: string | null
           updated_at?: string
           user_id: string
           youtube_id: string
@@ -592,6 +594,7 @@ export type Database = {
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
           title?: string
+          transcript_source?: string | null
           updated_at?: string
           user_id?: string
           youtube_id?: string
