@@ -804,7 +804,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           duration_seconds: duration,
           captions_missing: false,
           error_message: null,
-          failed_step: null
+          failed_step: null,
+          processing_step: 'generating_highlights',
         })
         .eq('id', videoId);
 
