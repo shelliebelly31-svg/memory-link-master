@@ -1508,7 +1508,7 @@ function wordsToSegments(fullText: string, words: any[]): Array<{start: number, 
   return segments;
 }
 
-
+async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
