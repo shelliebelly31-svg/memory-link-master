@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw, Upload } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
@@ -65,6 +65,8 @@ interface TranscriptViewProps {
   isResegmenting?: boolean;
   onRefetchCaptions?: () => Promise<void>;
   isRefetchingCaptions?: boolean;
+  onFixTimestampsViaAudio?: (file: File) => Promise<void>;
+  isFixingTimestamps?: boolean;
 }
 
 interface SelectionState {
@@ -98,6 +100,8 @@ export function TranscriptView({
   isResegmenting,
   onRefetchCaptions,
   isRefetchingCaptions,
+  onFixTimestampsViaAudio,
+  isFixingTimestamps,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -109,6 +113,7 @@ export function TranscriptView({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const transcriptContentRef = useRef<HTMLDivElement>(null);
+  const audioInputRef = useRef<HTMLInputElement>(null);
   
   // Track active selection for disabling pointer events on sticky elements
   const isSelectionActive = useSelectionActive(transcriptContentRef);
@@ -493,6 +498,35 @@ export function TranscriptView({
             <RefreshCw className={cn("h-3 w-3", isRefetchingCaptions && "animate-spin")} />
             {isRefetchingCaptions ? 'Fetching captions...' : 'Re-fetch YouTube captions (fix timestamps)'}
           </Button>
+        )}
+
+        {/* Fix timestamps via audio upload */}
+        {onFixTimestampsViaAudio && (
+          <>
+            <input
+              ref={audioInputRef}
+              type="file"
+              accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.webm,.ogg"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  onFixTimestampsViaAudio(file);
+                  e.target.value = '';
+                }
+              }}
+            />
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
+              onClick={() => audioInputRef.current?.click()}
+              disabled={isFixingTimestamps}
+            >
+              <Upload className={cn("h-3 w-3", isFixingTimestamps && "animate-spin")} />
+              {isFixingTimestamps ? 'Transcribing audio...' : 'Fix timestamps via audio (ElevenLabs)'}
+            </Button>
+          </>
         )}
 
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}

@@ -52,6 +52,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [isResegmenting, setIsResegmenting] = useState(false);
   const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
+  const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -165,6 +166,54 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
       });
     } finally {
       setIsRefetchingCaptions(false);
+    }
+  }, [id, queryClient, toast]);
+
+  const handleFixTimestampsViaAudio = useCallback(async (file: File) => {
+    if (!id) return;
+    if (file.size > 25 * 1024 * 1024) {
+      toast({
+        title: 'File too large',
+        description: 'Maximum file size is 25MB',
+        variant: 'destructive',
+      });
+      return;
+    }
+    setIsFixingTimestamps(true);
+    try {
+      const formData = new FormData();
+      formData.append('audio', file);
+      formData.append('video_id', id);
+
+      const { data: { session } } = await supabase.auth.getSession();
+      const response = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/transcribe-audio`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session?.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      const result = await response.json();
+      if (!response.ok) throw new Error(result.error || 'Transcription failed');
+
+      toast({
+        title: 'Audio transcribed',
+        description: `Created ${result.segments?.length || 0} segments with accurate timestamps`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['video', id] });
+    } catch (err: any) {
+      toast({
+        title: 'Transcription failed',
+        description: err.message || 'Something went wrong',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFixingTimestamps(false);
     }
   }, [id, queryClient, toast]);
 
@@ -440,6 +489,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                    isResegmenting={isResegmenting}
                    onRefetchCaptions={video.youtube_id && !video.youtube_id.startsWith('manual-') ? handleRefetchCaptions : undefined}
                    isRefetchingCaptions={isRefetchingCaptions}
+                   onFixTimestampsViaAudio={handleFixTimestampsViaAudio}
+                   isFixingTimestamps={isFixingTimestamps}
                  />
               </TabsContent>
               
