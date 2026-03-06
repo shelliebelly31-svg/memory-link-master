@@ -761,6 +761,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         return;
       }
 
+      await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
+
       // Delete existing segments if retrying
       await supabase
         .from('transcript_segments')
