@@ -572,6 +572,20 @@ export function TranscriptView({
           </>
         )}
 
+        {/* Re-process transcript (full pipeline with quality check + audio fallback) */}
+        {onReprocessTranscript && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
+            onClick={onReprocessTranscript}
+            disabled={isReprocessing || isFixingTimestamps}
+          >
+            <RefreshCw className={cn("h-3 w-3", isReprocessing && "animate-spin")} />
+            {isReprocessing ? 'Re-processing transcript...' : 'Re-process transcript (quality check + audio fallback)'}
+          </Button>
+        )}
+
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
         <div className="flex gap-2 mt-3" style={{ pointerEvents: 'auto' }}>
           <Button
