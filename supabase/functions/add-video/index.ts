@@ -700,7 +700,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       
       await supabase
         .from('videos')
-        .update({ status: 'transcribing' })
+        .update({ status: 'transcribing', processing_step: 'processing' })
         .eq('id', videoId);
 
       const metadata = await fetchVideoMetadata(youtubeId);
