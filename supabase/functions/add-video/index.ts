@@ -733,12 +733,15 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
+      await supabase.from('videos').update({ processing_step: 'extracting_captions' }).eq('id', videoId);
+
       let transcript = await fetchYouTubeCaptions(youtubeId);
       
       // If captions failed, try audio download + transcription fallback
       if (!transcript || transcript.length === 0) {
         console.log('All caption methods failed, trying audio download + transcription...');
-        transcript = await downloadAndTranscribeAudio(youtubeId);
+        await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
+        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
       }
 
       if (!transcript || transcript.length === 0) {
