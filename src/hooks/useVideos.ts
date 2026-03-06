@@ -33,6 +33,7 @@ export interface Video {
   created_at: string;
   updated_at: string;
   source_type: string | null;
+  transcript_source: string | null;
 }
 
 export interface TranscriptSegment {

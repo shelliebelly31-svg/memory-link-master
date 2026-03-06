@@ -165,7 +165,17 @@ export function ProcessingPanel({ videoId, onComplete }: ProcessingPanelProps) {
       )}
 
       {isComplete && (
-        <div className="mt-4 pt-3 border-t border-border">
+        <div className="mt-4 pt-3 border-t border-border space-y-2">
+          {video?.transcript_source && (
+            <p className="text-xs text-muted-foreground text-center">
+              Transcript source: <span className="font-medium text-foreground">
+                {video.transcript_source === 'captions' ? 'YouTube captions' 
+                  : video.transcript_source === 'audio_transcription' ? 'Audio transcription (ElevenLabs)'
+                  : video.transcript_source === 'gemini_fallback' ? 'AI fallback transcription (Gemini)'
+                  : video.transcript_source}
+              </span>
+            </p>
+          )}
           <Button 
             className="w-full gap-2" 
             onClick={() => navigate(`/video/${videoId}`)}
