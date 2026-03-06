@@ -713,13 +713,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
 
       console.log('Transcript saved with', segments.length, 'segments');
 
-      // If Firecrawl was used, timestamps are estimated - try to fix them with ElevenLabs audio transcription
-      if (captionResult.method === 'firecrawl') {
-        console.log('Firecrawl was used - attempting ElevenLabs audio timestamp correction...');
-        correctTimestampsViaAudio(videoId, youtubeId, transcript, supabase).catch(e => 
-          console.error('ElevenLabs timestamp correction failed (non-fatal):', e)
-        );
-      }
+      // Note: If Firecrawl was used, timestamps are estimated.
+      // Users can manually trigger timestamp correction via the "Fix Timestamps" button.
     }
 
     // Step 3: Generate AI suggestions
@@ -894,24 +889,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     console.error('Timedtext method failed:', e);
   }
 
-  // Method 4: Download audio + transcribe with ElevenLabs (accurate spoken words)
-  try {
-    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-    if (ELEVENLABS_API_KEY) {
-      console.log('Method 4: Trying audio download + ElevenLabs transcription for', youtubeId);
-      const audioSegments = await transcribeViaAudioDownload(youtubeId, ELEVENLABS_API_KEY);
-      if (audioSegments.length > 0) {
-        console.log(`Audio transcription: Got ${audioSegments.length} segments`);
-        return { segments: audioSegments, method: 'audio_transcription' };
-      }
-    } else {
-      console.log('ElevenLabs not configured, skipping Method 4');
-    }
-  } catch (e) {
-    console.error('Audio transcription method failed:', e);
-  }
-
-  // Method 5: Firecrawl scrape (last resort - extracts page content as transcript substitute)
+  // Method 4: Firecrawl scrape (last resort - extracts page content as transcript substitute)
   try {
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (FIRECRAWL_API_KEY) {
