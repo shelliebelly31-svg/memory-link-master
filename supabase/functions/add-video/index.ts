@@ -752,6 +752,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
             captions_missing: true,
             status: 'needs_attention',
             failed_step: 'captions',
+            processing_step: 'failed',
             error_message: 'No captions available and audio transcription failed. Please add the transcript manually by pasting text or uploading screenshots.'
           })
           .eq('id', videoId);
