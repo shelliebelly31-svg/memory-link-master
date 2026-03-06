@@ -1256,7 +1256,7 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 }
 
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
-async function downloadAndTranscribeAudio(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
   try {
     // Step 1: Get streaming URLs from Innertube API
     console.log('Audio fallback: Fetching streaming data for', youtubeId);
