@@ -112,6 +112,8 @@ export function TranscriptView({
   isRecording,
   onStartRecording,
   onStopRecording,
+  onReprocessTranscript,
+  isReprocessing,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
