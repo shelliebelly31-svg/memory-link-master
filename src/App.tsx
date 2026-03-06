@@ -56,13 +56,18 @@ function AppRoutes() {
   );
 }
 
-function App() {
-  const [showSplash, setShowSplash] = useState(true);
+function SplashGate({ children }: { children: React.ReactNode }) {
+  const [showSplash, setShowSplash] = useState(() => {
+    // Skip splash if we already have a session in storage (returning user)
+    const hasSession = !!localStorage.getItem('sb-trmcgpjsweacadqoadlh-auth-token');
+    return !hasSession;
+  });
 
   useEffect(() => {
+    if (!showSplash) return;
     const timer = setTimeout(() => setShowSplash(false), 3500);
     return () => clearTimeout(timer);
-  }, []);
+  }, [showSplash]);
 
   if (showSplash) {
     return (
@@ -90,16 +95,22 @@ function App() {
     );
   }
 
+  return <>{children}</>;
+}
+
+function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
-        <TooltipProvider>
-          <Toaster />
-          <Sonner />
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </TooltipProvider>
+        <SplashGate>
+          <TooltipProvider>
+            <Toaster />
+            <Sonner />
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </TooltipProvider>
+        </SplashGate>
       </AuthProvider>
     </QueryClientProvider>
   );
