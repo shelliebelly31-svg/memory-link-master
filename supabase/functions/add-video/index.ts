@@ -1247,7 +1247,268 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
   return combined;
 }
 
-async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
+// Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
+async function downloadAndTranscribeAudio(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+  try {
+    // Step 1: Get streaming URLs from Innertube API
+    console.log('Audio fallback: Fetching streaming data for', youtubeId);
+    const playerResponse = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+      body: JSON.stringify({
+        context: {
+          client: {
+            hl: 'en',
+            gl: 'US',
+            clientName: 'WEB',
+            clientVersion: '2.20240101.00.00',
+          },
+        },
+        videoId: youtubeId,
+      }),
+    });
+
+    if (!playerResponse.ok) {
+      console.error('Audio fallback: Innertube returned', playerResponse.status);
+      return [];
+    }
+
+    const playerData = await playerResponse.json();
+    const adaptiveFormats = playerData?.streamingData?.adaptiveFormats || [];
+    
+    // Find audio-only streams, prefer mp4a (AAC) for best compatibility
+    const audioFormats = adaptiveFormats
+      .filter((f: any) => f.mimeType?.startsWith('audio/'))
+      .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+
+    if (audioFormats.length === 0) {
+      console.log('Audio fallback: No audio streams found in streaming data');
+      return [];
+    }
+
+    const audioFormat = audioFormats.find((f: any) => f.mimeType?.includes('mp4a'))
+      || audioFormats[0];
+    
+    const audioUrl = audioFormat.url;
+    if (!audioUrl) {
+      console.log('Audio fallback: Audio stream URL not directly available (may require signature deciphering)');
+      return [];
+    }
+
+    // Step 2: Download the audio (limit to ~25MB / first few minutes)
+    console.log(`Audio fallback: Downloading audio stream (${audioFormat.mimeType}, bitrate: ${audioFormat.bitrate})`);
+    const audioResponse = await fetch(audioUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Range': 'bytes=0-25165824', // First 24MB
+      },
+    });
+
+    if (!audioResponse.ok && audioResponse.status !== 206) {
+      console.error('Audio fallback: Download failed with status', audioResponse.status);
+      return [];
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    console.log(`Audio fallback: Downloaded ${(audioBuffer.byteLength / (1024 * 1024)).toFixed(1)}MB`);
+
+    if (audioBuffer.byteLength < 1000) {
+      console.log('Audio fallback: Downloaded audio too small, likely failed');
+      return [];
+    }
+
+    // Step 3: Try ElevenLabs transcription
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (ELEVENLABS_API_KEY) {
+      try {
+        console.log('Audio fallback: Trying ElevenLabs transcription...');
+        const mimeType = audioFormat.mimeType?.split(';')[0] || 'audio/mp4';
+        const audioBlob = new Blob([audioBuffer], { type: mimeType });
+        const formData = new FormData();
+        formData.append('file', audioBlob, 'audio.mp4');
+        formData.append('model_id', 'scribe_v2');
+        formData.append('tag_audio_events', 'false');
+        formData.append('diarize', 'false');
+        formData.append('timestamps_granularity', 'word');
+
+        const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+          method: 'POST',
+          headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+          body: formData,
+        });
+
+        if (sttResponse.ok) {
+          const sttData = await sttResponse.json();
+          const fullText = sttData.text || '';
+          const words = sttData.words || [];
+
+          if (fullText.trim()) {
+            console.log(`Audio fallback: ElevenLabs transcribed ${words.length} words`);
+            return wordsToSegments(fullText, words);
+          }
+        } else {
+          const errText = await sttResponse.text();
+          console.error('Audio fallback: ElevenLabs failed:', sttResponse.status, errText);
+        }
+      } catch (e) {
+        console.error('Audio fallback: ElevenLabs error:', e);
+      }
+    } else {
+      console.log('Audio fallback: No ELEVENLABS_API_KEY, skipping ElevenLabs');
+    }
+
+    // Step 4: Gemini fallback
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) {
+      console.log('Audio fallback: No LOVABLE_API_KEY for Gemini fallback');
+      return [];
+    }
+
+    try {
+      console.log('Audio fallback: Trying Gemini transcription...');
+      const audioBytes = new Uint8Array(audioBuffer);
+      let base64Audio = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < audioBytes.length; i += chunkSize) {
+        const chunk = audioBytes.subarray(i, i + chunkSize);
+        base64Audio += String.fromCharCode(...chunk);
+      }
+      base64Audio = btoa(base64Audio);
+
+      const mimeType = audioFormat.mimeType?.split(';')[0] || 'audio/mp4';
+
+      const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an audio transcription assistant. Transcribe the audio accurately. Return ONLY valid JSON with this exact format:
+{
+  "text": "full transcription text here",
+  "segments": [
+    {"start": 0, "end": 15, "text": "segment text here"},
+    {"start": 15, "end": 30, "text": "next segment text"}
+  ]
+}
+Rules:
+- Transcribe all spoken words accurately
+- Split into segments of roughly 15-20 seconds each
+- Estimate timestamps based on speech pacing (~2.5 words per second)
+- Do NOT include any markdown, code fences, or explanation - ONLY the JSON object`
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_audio',
+                  input_audio: {
+                    data: base64Audio,
+                    format: mimeType.includes('wav') ? 'wav' : mimeType.includes('mp3') ? 'mp3' : 'mp4',
+                  }
+                },
+                {
+                  type: 'text',
+                  text: 'Transcribe this audio recording. Return only the JSON object with text and segments.'
+                }
+              ]
+            }
+          ],
+        }),
+      });
+
+      if (!geminiResponse.ok) {
+        const geminiErr = await geminiResponse.text();
+        console.error('Audio fallback: Gemini failed:', geminiResponse.status, geminiErr);
+        return [];
+      }
+
+      const geminiData = await geminiResponse.json();
+      const content = geminiData.choices?.[0]?.message?.content || '';
+      const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      
+      const parsed = JSON.parse(jsonStr);
+      if (parsed.segments && Array.isArray(parsed.segments) && parsed.segments.length > 0) {
+        const segments = parsed.segments
+          .map((s: any) => ({
+            start: Number(s.start) || 0,
+            end: Number(s.end) || 0,
+            text: String(s.text || '').trim(),
+          }))
+          .filter((s: any) => s.text.length > 0);
+        
+        console.log(`Audio fallback: Gemini transcribed ${segments.length} segments`);
+        return segments;
+      }
+    } catch (e) {
+      console.error('Audio fallback: Gemini error:', e);
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Audio fallback: Unexpected error:', error);
+    return [];
+  }
+}
+
+// Convert ElevenLabs word-level data to segments
+function wordsToSegments(fullText: string, words: any[]): Array<{start: number, end: number, text: string}> {
+  const segments: Array<{start: number, end: number, text: string}> = [];
+  const hasValidTimestamps = words.length > 1 && words.some((w: any) => (w.start || 0) > 0 || (w.end || 0) > 0);
+
+  if (hasValidTimestamps) {
+    let current: { start: number; end: number; words: string[] } | null = null;
+    for (const word of words) {
+      const ws = word.start || 0;
+      const we = word.end || ws + 0.5;
+      const wt = word.text || '';
+      if (!current) {
+        current = { start: ws, end: we, words: [wt] };
+      } else if (we - current.start >= 15) {
+        segments.push({ start: current.start, end: current.end, text: current.words.join(' ').trim() });
+        current = { start: ws, end: we, words: [wt] };
+      } else {
+        current.end = we;
+        current.words.push(wt);
+      }
+    }
+    if (current && current.words.length > 0) {
+      segments.push({ start: current.start, end: current.end, text: current.words.join(' ').trim() });
+    }
+  }
+
+  // Fallback: sentence-based segmentation
+  if (segments.length <= 1 && fullText.trim()) {
+    segments.length = 0;
+    const sentences = fullText.match(/[^.!?]+[.!?]+/g) || [fullText];
+    const totalWords = fullText.split(/\s+/).length;
+    const estimatedDuration = totalWords / 2.5;
+    const totalChars = sentences.reduce((sum, s) => sum + s.length, 0);
+    let currentTime = 0;
+    for (const sentence of sentences) {
+      const proportion = sentence.length / totalChars;
+      const duration = Math.max(2, estimatedDuration * proportion);
+      segments.push({
+        start: Math.round(currentTime * 10) / 10,
+        end: Math.round((currentTime + duration) * 10) / 10,
+        text: sentence.trim(),
+      });
+      currentTime += duration;
+    }
+  }
+
+  return segments;
+}
+
+
   try {
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
     if (!LOVABLE_API_KEY) {
