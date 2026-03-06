@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, Mic, MicOff, MousePointer, Plus, RefreshCw, Upload } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
@@ -67,6 +67,10 @@ interface TranscriptViewProps {
   isRefetchingCaptions?: boolean;
   onFixTimestampsViaAudio?: (file: File) => Promise<void>;
   isFixingTimestamps?: boolean;
+  onRecordAndTranscribe?: (blob: Blob) => Promise<void>;
+  isRecording?: boolean;
+  onStartRecording?: () => void;
+  onStopRecording?: () => void;
 }
 
 interface SelectionState {
@@ -102,6 +106,10 @@ export function TranscriptView({
   isRefetchingCaptions,
   onFixTimestampsViaAudio,
   isFixingTimestamps,
+  onRecordAndTranscribe,
+  isRecording,
+  onStartRecording,
+  onStopRecording,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -500,6 +508,37 @@ export function TranscriptView({
           </Button>
         )}
 
+        {/* Record & Transcribe */}
+        {onStartRecording && onStopRecording && (
+          <Button
+            variant={isRecording ? "destructive" : "outline"}
+            size="sm"
+            className={cn(
+              "mt-2 w-full gap-1.5 text-xs",
+              !isRecording && "text-muted-foreground"
+            )}
+            onClick={isRecording ? onStopRecording : onStartRecording}
+            disabled={isFixingTimestamps}
+          >
+            {isRecording ? (
+              <>
+                <MicOff className="h-3 w-3" />
+                Stop recording & transcribe
+              </>
+            ) : isFixingTimestamps ? (
+              <>
+                <RefreshCw className="h-3 w-3 animate-spin" />
+                Transcribing audio...
+              </>
+            ) : (
+              <>
+                <Mic className="h-3 w-3" />
+                Record video audio & transcribe
+              </>
+            )}
+          </Button>
+        )}
+
         {/* Fix timestamps via audio upload */}
         {onFixTimestampsViaAudio && (
           <>
@@ -524,7 +563,7 @@ export function TranscriptView({
               disabled={isFixingTimestamps}
             >
               <Upload className={cn("h-3 w-3", isFixingTimestamps && "animate-spin")} />
-              {isFixingTimestamps ? 'Transcribing audio...' : 'Fix timestamps via audio (ElevenLabs)'}
+              {isFixingTimestamps ? 'Transcribing audio...' : 'Upload audio file to transcribe'}
             </Button>
           </>
         )}

@@ -53,6 +53,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [isResegmenting, setIsResegmenting] = useState(false);
   const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -216,6 +219,51 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
       setIsFixingTimestamps(false);
     }
   }, [id, queryClient, toast]);
+
+  const handleStartRecording = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+      audioChunksRef.current = [];
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) audioChunksRef.current.push(e.data);
+      };
+      
+      mediaRecorder.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop());
+        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
+        if (blob.size > 0) {
+          const file = new File([blob], 'recorded-audio.webm', { type: 'audio/webm' });
+          await handleFixTimestampsViaAudio(file);
+        }
+      };
+      
+      mediaRecorder.start(1000);
+      mediaRecorderRef.current = mediaRecorder;
+      setIsRecording(true);
+      
+      // Auto-play the video
+      playerControlsRef.current?.play();
+      
+      toast({ title: 'Recording started', description: 'Play the video — your mic is capturing the audio' });
+    } catch (err: any) {
+      toast({
+        title: 'Microphone access denied',
+        description: 'Please allow microphone access to record video audio',
+        variant: 'destructive',
+      });
+    }
+  }, [handleFixTimestampsViaAudio, toast]);
+
+  const handleStopRecording = useCallback(() => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      mediaRecorderRef.current.stop();
+      mediaRecorderRef.current = null;
+    }
+    setIsRecording(false);
+    playerControlsRef.current?.pause();
+  }, []);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
@@ -491,6 +539,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                    isRefetchingCaptions={isRefetchingCaptions}
                    onFixTimestampsViaAudio={handleFixTimestampsViaAudio}
                    isFixingTimestamps={isFixingTimestamps}
+                   onStartRecording={handleStartRecording}
+                   onStopRecording={handleStopRecording}
+                   isRecording={isRecording}
                  />
               </TabsContent>
               
