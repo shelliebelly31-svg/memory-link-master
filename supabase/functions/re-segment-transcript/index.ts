@@ -60,8 +60,17 @@ serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
     }
 
-    // Combine all text
-    const fullText = existingSegments.map(s => s.text).join(' ').replace(/\s+/g, ' ').trim();
+    // Build a word-to-timestamp map from original segments
+    // Each word gets the timing of the segment it came from
+    const wordTimings: { word: string; start: number; end: number }[] = [];
+    for (const seg of existingSegments) {
+      const words = seg.text.split(/\s+/).filter((w: string) => w.length > 0);
+      for (const word of words) {
+        wordTimings.push({ word, start: Number(seg.start_seconds), end: Number(seg.end_seconds) });
+      }
+    }
+
+    const fullText = wordTimings.map(w => w.word).join(' ');
     const totalDuration = video.duration_seconds || existingSegments[existingSegments.length - 1].end_seconds || fullText.split(/\s+/).length / 2.5;
 
     // Use AI to split by topic changes
@@ -71,24 +80,43 @@ serve(async (req) => {
     if (lovableApiKey) {
       paragraphs = await splitByTopicAI(fullText, lovableApiKey);
     } else {
-      // Fallback: split by sentences and group into ~3-5 sentence paragraphs
       paragraphs = splitByParagraphsFallback(fullText);
     }
 
-    // Distribute timestamps proportionally
-    const totalChars = paragraphs.reduce((sum, p) => sum + p.length, 0);
-    let currentTime = 0;
+    // Map each paragraph back to original word timings to preserve accurate timestamps
+    let wordIndex = 0;
     const newSegments = paragraphs.map(paragraph => {
-      const proportion = paragraph.length / totalChars;
-      const duration = Math.max(1, totalDuration * proportion);
-      const seg = {
+      const paraWords = paragraph.trim().split(/\s+/).filter(w => w.length > 0);
+      
+      // Find where this paragraph's words start in the original word list
+      // Use a greedy forward match to handle minor AI text variations
+      let matchStart = wordIndex;
+      
+      // Try to find the first word of this paragraph starting from current position
+      if (paraWords.length > 0) {
+        const firstWord = paraWords[0].toLowerCase().replace(/[^a-z0-9]/g, '');
+        // Search forward (but not too far) for the first matching word
+        for (let i = wordIndex; i < Math.min(wordIndex + 20, wordTimings.length); i++) {
+          if (wordTimings[i].word.toLowerCase().replace(/[^a-z0-9]/g, '') === firstWord) {
+            matchStart = i;
+            break;
+          }
+        }
+      }
+
+      const matchEnd = Math.min(matchStart + paraWords.length - 1, wordTimings.length - 1);
+      
+      const startTime = matchStart < wordTimings.length ? wordTimings[matchStart].start : 0;
+      const endTime = matchEnd < wordTimings.length ? wordTimings[matchEnd].end : totalDuration;
+      
+      wordIndex = matchEnd + 1;
+
+      return {
         video_id,
-        start_seconds: Math.round(currentTime * 10) / 10,
-        end_seconds: Math.round((currentTime + duration) * 10) / 10,
+        start_seconds: Math.round(startTime * 10) / 10,
+        end_seconds: Math.round(endTime * 10) / 10,
         text: paragraph.trim(),
       };
-      currentTime += duration;
-      return seg;
     });
 
     // Delete old segments and insert new ones
@@ -125,7 +153,7 @@ Rules:
 Transcript:
 ${fullText}`;
 
-  const response = await fetch('https://api.lovable.dev/v1/chat/completions', {
+  const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${apiKey}`,
