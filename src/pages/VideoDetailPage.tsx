@@ -51,6 +51,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [isResegmenting, setIsResegmenting] = useState(false);
+  const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -139,6 +140,31 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
       });
     } finally {
       setIsResegmenting(false);
+    }
+  }, [id, queryClient, toast]);
+
+  const handleFixTimestamps = useCallback(async () => {
+    if (!id) return;
+    setIsFixingTimestamps(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('fix-timestamps', {
+        body: { video_id: id },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: 'Timestamps corrected',
+        description: `Rebuilt ${data.segment_count} segments with accurate timestamps from audio`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+    } catch (err: any) {
+      toast({
+        title: 'Timestamp fix failed',
+        description: err.message || 'Could not download or transcribe audio',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFixingTimestamps(false);
     }
   }, [id, queryClient, toast]);
 
@@ -412,6 +438,9 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onPlayVideo={() => playerControlsRef.current?.play()}
                   onResegment={handleResegment}
                   isResegmenting={isResegmenting}
+                  onFixTimestamps={handleFixTimestamps}
+                  isFixingTimestamps={isFixingTimestamps}
+                  isYouTubeVideo={!!(video.youtube_id && !video.youtube_id.startsWith('manual-'))}
                 />
               </TabsContent>
               

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, MousePointer, Plus, RefreshCw, Clock } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
@@ -63,6 +63,9 @@ interface TranscriptViewProps {
   onPlayVideo?: () => void;
   onResegment?: () => Promise<void>;
   isResegmenting?: boolean;
+  onFixTimestamps?: () => Promise<void>;
+  isFixingTimestamps?: boolean;
+  isYouTubeVideo?: boolean;
 }
 
 interface SelectionState {
@@ -94,6 +97,9 @@ export function TranscriptView({
   onPlayVideo,
   onResegment,
   isResegmenting,
+  onFixTimestamps,
+  isFixingTimestamps,
+  isYouTubeVideo,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -474,6 +480,20 @@ export function TranscriptView({
           >
             <RefreshCw className={cn("h-3 w-3", isResegmenting && "animate-spin")} />
             {isResegmenting ? 'Re-segmenting...' : 'Re-segment transcript into sentences'}
+          </Button>
+        )}
+
+        {/* Fix Timestamps button - only for YouTube videos */}
+        {onFixTimestamps && isYouTubeVideo && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
+            onClick={onFixTimestamps}
+            disabled={isFixingTimestamps}
+          >
+            <Clock className={cn("h-3 w-3", isFixingTimestamps && "animate-spin")} />
+            {isFixingTimestamps ? 'Fixing timestamps...' : 'Fix timestamps via audio'}
           </Button>
         )}
 
