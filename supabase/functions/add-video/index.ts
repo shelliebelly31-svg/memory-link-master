@@ -833,6 +833,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       }
     }
 
+    await supabase.from('videos').update({ processing_step: 'ready' }).eq('id', videoId);
     console.log('Video processed successfully:', videoId);
 
   } catch (error: unknown) {
