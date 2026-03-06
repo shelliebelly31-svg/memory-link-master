@@ -108,6 +108,13 @@ export function useVideos() {
       return data as Video[];
     },
     enabled: !!user,
+    refetchInterval: (query) => {
+      const videos = query.state.data as Video[] | undefined;
+      const hasProcessing = videos?.some(
+        (video) => video.status === 'queued' || video.status === 'transcribing'
+      );
+      return hasProcessing ? 3000 : false;
+    },
   });
 }
 

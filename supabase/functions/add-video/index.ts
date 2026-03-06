@@ -972,16 +972,25 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
   const data = await response.json();
   const markdown = data?.data?.markdown || data?.markdown || '';
   
-  if (!markdown || markdown.trim().length < 100) {
+  if (!markdown || markdown.trim().length < 20) {
     console.log('Firecrawl: Not enough content extracted');
     return [];
   }
 
+  // Build a plain-text fallback candidate from markdown in case AI extraction fails
+  const fallbackPlainText = markdown
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/\[(.*?)\]\((.*?)\)/g, ' $1 ')
+    .replace(/https?:\/\/\S+/g, ' ')
+    .replace(/[#>*_`~|]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
   // Use AI to extract only the spoken transcript, filtering out title, description, metadata
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
-    console.log('No LOVABLE_API_KEY, cannot clean Firecrawl content');
-    return [];
+    console.log('No LOVABLE_API_KEY, using Firecrawl raw-text fallback');
+    return buildEstimatedSegmentsFromText(fallbackPlainText);
   }
 
   try {
@@ -1008,7 +1017,7 @@ Remove ALL of the following:
 - Copyright notices
 
 Return ONLY the actual spoken words as a clean transcript. Split into natural paragraphs (one paragraph per topic shift or every ~30 seconds of speech). 
-Return as a JSON object with a "paragraphs" array of strings. Each string should be one paragraph of spoken content.
+Return as a JSON object with a "paragraphs" array of strings.
 If you cannot identify any spoken transcript content, return {"paragraphs": []}.`
           },
           {
@@ -1022,51 +1031,103 @@ If you cannot identify any spoken transcript content, return {"paragraphs": []}.
 
     if (!aiResponse.ok) {
       console.error('AI cleanup failed:', aiResponse.status);
-      return [];
+      const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
+      console.log(`Firecrawl fallback: Built ${fallbackSegments.length} estimated segments from raw markdown`);
+      return fallbackSegments;
     }
 
     const aiResult = await aiResponse.json();
     const content = aiResult.choices?.[0]?.message?.content;
-    if (!content) return [];
 
-    let parsed;
-    try {
-      parsed = JSON.parse(content);
-    } catch (e) {
-      console.error('Failed to parse AI transcript response');
-      return [];
+    let paragraphs: string[] = [];
+    if (content) {
+      try {
+        const parsed = JSON.parse(content);
+        paragraphs = Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : [];
+      } catch (e) {
+        console.error('Failed to parse AI transcript response');
+      }
     }
 
-    const paragraphs: string[] = parsed.paragraphs || [];
-    if (paragraphs.length === 0) return [];
+    if (paragraphs.length > 0) {
+      // Estimate total duration: ~150 words per minute of speech
+      const totalWords = paragraphs.reduce((sum, p) => sum + p.split(/\s+/).filter(Boolean).length, 0);
+      const estimatedDurationSeconds = Math.max(60, (totalWords / 150) * 60);
 
-    // Estimate total duration: ~150 words per minute of speech
-    const totalWords = paragraphs.reduce((sum, p) => sum + p.split(/\s+/).length, 0);
-    const estimatedDurationSeconds = Math.max(60, (totalWords / 150) * 60);
+      const segments: Array<{start: number, end: number, text: string}> = [];
+      let wordsSoFar = 0;
 
-    const segments: Array<{start: number, end: number, text: string}> = [];
-    let wordsSoFar = 0;
+      for (const para of paragraphs) {
+        const paraWords = para.split(/\s+/).filter(Boolean).length;
+        const startTime = Math.round((wordsSoFar / Math.max(totalWords, 1)) * estimatedDurationSeconds);
+        wordsSoFar += paraWords;
+        const endTime = Math.round((wordsSoFar / Math.max(totalWords, 1)) * estimatedDurationSeconds);
 
-    for (const para of paragraphs) {
-      const paraWords = para.split(/\s+/).length;
-      const startTime = Math.round((wordsSoFar / totalWords) * estimatedDurationSeconds);
-      wordsSoFar += paraWords;
-      const endTime = Math.round((wordsSoFar / totalWords) * estimatedDurationSeconds);
+        segments.push({
+          start: startTime,
+          end: endTime,
+          text: para.trim(),
+        });
+      }
 
-      segments.push({
-        start: startTime,
-        end: endTime,
-        text: para.trim(),
-      });
+      console.log(`Firecrawl+AI: Extracted ${segments.length} clean segments (~${Math.round(estimatedDurationSeconds)}s estimated)`);
+      return segments;
     }
 
-    console.log(`Firecrawl+AI: Extracted ${segments.length} clean segments (~${Math.round(estimatedDurationSeconds)}s estimated)`);
-    return segments;
+    const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
+    console.log(`Firecrawl fallback: Built ${fallbackSegments.length} estimated segments from raw markdown`);
+    return fallbackSegments;
 
   } catch (e) {
     console.error('AI transcript extraction failed:', e);
+    const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
+    console.log(`Firecrawl fallback (after AI exception): Built ${fallbackSegments.length} estimated segments from raw markdown`);
+    return fallbackSegments;
+  }
+}
+
+function buildEstimatedSegmentsFromText(text: string): Array<{start: number, end: number, text: string}> {
+  const normalized = text.replace(/\s+/g, ' ').trim();
+  if (!normalized) return [];
+
+  const lightlyFiltered = normalized
+    .replace(/\b(subscribe|like|comment|share|playlist|channel|views?|followers?)\b/gi, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  const source = lightlyFiltered.length > 120 ? lightlyFiltered : normalized;
+  const words = source.split(/\s+/).filter(Boolean);
+
+  if (words.length < 8) {
     return [];
   }
+
+  const wordsPerSecond = 2.5;
+  const targetWordsPerSegment = 45;
+  const segments: Array<{start: number, end: number, text: string}> = [];
+
+  for (let i = 0; i < words.length; i += targetWordsPerSegment) {
+    const chunk = words.slice(i, i + targetWordsPerSegment);
+    if (chunk.length < 8) continue;
+
+    const start = Math.round((i / wordsPerSecond) * 10) / 10;
+    const end = Math.round(((i + chunk.length) / wordsPerSecond) * 10) / 10;
+
+    segments.push({
+      start,
+      end,
+      text: chunk.join(' ').trim(),
+    });
+  }
+
+  if (segments.length === 0) {
+    const previewWords = words.slice(0, 45);
+    if (previewWords.length >= 8) {
+      return [{ start: 0, end: Math.max(15, Math.round((previewWords.length / wordsPerSecond) * 10) / 10), text: previewWords.join(' ') }];
+    }
+  }
+
+  return segments;
 }
 
 // Method 1: Use YouTube's Innertube API
