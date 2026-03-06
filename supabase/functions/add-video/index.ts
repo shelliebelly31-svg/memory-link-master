@@ -1329,6 +1329,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     }
 
     // Step 3: Try ElevenLabs transcription
+    if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing' }).eq('id', videoId);
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
     if (ELEVENLABS_API_KEY) {
       try {
