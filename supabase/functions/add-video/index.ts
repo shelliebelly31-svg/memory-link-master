@@ -733,8 +733,14 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
-      const transcript = await fetchYouTubeCaptions(youtubeId);
+      let transcript = await fetchYouTubeCaptions(youtubeId);
       
+      // If captions failed, try audio download + transcription fallback
+      if (!transcript || transcript.length === 0) {
+        console.log('All caption methods failed, trying audio download + transcription...');
+        transcript = await downloadAndTranscribeAudio(youtubeId);
+      }
+
       if (!transcript || transcript.length === 0) {
         // Captions not found - set to needs_attention instead of failed
         await supabase
@@ -743,11 +749,11 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
             captions_missing: true,
             status: 'needs_attention',
             failed_step: 'captions',
-            error_message: 'No captions available for this video. Please add the transcript manually by pasting text or uploading screenshots.'
+            error_message: 'No captions available and audio transcription failed. Please add the transcript manually by pasting text or uploading screenshots.'
           })
           .eq('id', videoId);
         
-        console.log('Captions not found, set to needs_attention');
+        console.log('Captions and audio transcription both failed, set to needs_attention');
         return;
       }
 
