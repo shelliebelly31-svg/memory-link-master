@@ -98,9 +98,15 @@ serve(async (req) => {
         );
       }
 
-      // Convert audio to base64 for Gemini
-      const audioBytes = await audioFile.arrayBuffer();
-      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBytes)));
+      // Convert audio to base64 for Gemini (chunk-safe for large files)
+      const audioBytes = new Uint8Array(await audioFile.arrayBuffer());
+      let base64Audio = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < audioBytes.length; i += chunkSize) {
+        const chunk = audioBytes.subarray(i, i + chunkSize);
+        base64Audio += String.fromCharCode(...chunk);
+      }
+      base64Audio = btoa(base64Audio);
 
       // Determine MIME type
       const mimeType = audioFile.type || 'audio/webm';
