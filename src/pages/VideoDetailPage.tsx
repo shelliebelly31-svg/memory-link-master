@@ -54,6 +54,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
@@ -264,6 +265,32 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     setIsRecording(false);
     playerControlsRef.current?.pause();
   }, []);
+
+  const handleReprocessTranscript = useCallback(async () => {
+    if (!id) return;
+    setIsReprocessing(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('add-video', {
+        body: { retry_video_id: id, retry_from_step: 'captions' },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      toast({
+        title: 'Re-processing transcript',
+        description: 'Running quality check with audio transcription fallback...',
+      });
+      queryClient.invalidateQueries({ queryKey: ['video', id] });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+    } catch (err: any) {
+      toast({
+        title: 'Re-process failed',
+        description: err.message || 'Something went wrong',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsReprocessing(false);
+    }
+  }, [id, queryClient, toast]);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
@@ -542,6 +569,8 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                    onStartRecording={handleStartRecording}
                    onStopRecording={handleStopRecording}
                    isRecording={isRecording}
+                   onReprocessTranscript={video.youtube_id && !video.youtube_id.startsWith('manual-') ? handleReprocessTranscript : undefined}
+                   isReprocessing={isReprocessing}
                  />
               </TabsContent>
               

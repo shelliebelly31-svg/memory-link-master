@@ -71,6 +71,8 @@ interface TranscriptViewProps {
   isRecording?: boolean;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
+  onReprocessTranscript?: () => Promise<void>;
+  isReprocessing?: boolean;
 }
 
 interface SelectionState {
@@ -110,6 +112,8 @@ export function TranscriptView({
   isRecording,
   onStartRecording,
   onStopRecording,
+  onReprocessTranscript,
+  isReprocessing,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);
@@ -566,6 +570,20 @@ export function TranscriptView({
               {isFixingTimestamps ? 'Transcribing audio...' : 'Upload audio file to transcribe'}
             </Button>
           </>
+        )}
+
+        {/* Re-process transcript (full pipeline with quality check + audio fallback) */}
+        {onReprocessTranscript && (
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
+            onClick={onReprocessTranscript}
+            disabled={isReprocessing || isFixingTimestamps}
+          >
+            <RefreshCw className={cn("h-3 w-3", isReprocessing && "animate-spin")} />
+            {isReprocessing ? 'Re-processing transcript...' : 'Re-process transcript (quality check + audio fallback)'}
+          </Button>
         )}
 
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
