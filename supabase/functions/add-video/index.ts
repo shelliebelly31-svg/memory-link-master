@@ -688,12 +688,77 @@ async function processFromScreenshots(videoId: string, screenshots: string[], yo
   }
 }
 
+// Transcript quality evaluation
+function evaluateTranscriptQuality(segments: Array<{start: number, end: number, text: string}>, videoDurationSeconds?: number): {
+  isGood: boolean;
+  reason: string;
+} {
+  if (!segments || segments.length === 0) {
+    return { isGood: false, reason: 'No segments' };
+  }
+
+  // Check 1: Too few segments for a real transcript
+  if (segments.length < 3) {
+    return { isGood: false, reason: `Only ${segments.length} segments — likely incomplete` };
+  }
+
+  // Check 2: Total word count too low (a real spoken transcript has many words)
+  const totalWords = segments.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
+  if (totalWords < 50) {
+    return { isGood: false, reason: `Only ${totalWords} words — too sparse for spoken transcript` };
+  }
+
+  // Check 3: Average segment length is suspiciously short (page metadata, not speech)
+  const avgWordsPerSegment = totalWords / segments.length;
+  if (avgWordsPerSegment < 4) {
+    return { isGood: false, reason: `Average ${avgWordsPerSegment.toFixed(1)} words/segment — looks like metadata, not speech` };
+  }
+
+  // Check 4: Large timestamp gaps (>120s between consecutive segments)
+  let largeGaps = 0;
+  for (let i = 1; i < segments.length; i++) {
+    const gap = segments[i].start - segments[i - 1].end;
+    if (gap > 120) largeGaps++;
+  }
+  if (largeGaps > segments.length * 0.3) {
+    return { isGood: false, reason: `${largeGaps} large timestamp gaps — missing spoken continuity` };
+  }
+
+  // Check 5: All timestamps are 0 or synthetic (30s intervals = Firecrawl page scrape)
+  const allSyntheticTimestamps = segments.every((s, i) => s.start === i * 30);
+  if (allSyntheticTimestamps && segments.length > 2) {
+    // This is likely Firecrawl-generated page text with fake 30s intervals
+    // Check if content looks like page text vs speech
+    const fullText = segments.map(s => s.text).join(' ').toLowerCase();
+    const pageIndicators = ['subscribe', 'click here', 'copyright', 'privacy policy', 'terms of service', 'all rights reserved', 'sign in', 'sign up', 'cookies'];
+    const pageIndicatorCount = pageIndicators.filter(ind => fullText.includes(ind)).length;
+    if (pageIndicatorCount >= 2) {
+      return { isGood: false, reason: 'Content appears to be page text, not spoken dialogue' };
+    }
+    // Even without page indicators, synthetic timestamps from Firecrawl should be treated as low quality
+    return { isGood: false, reason: 'Synthetic timestamps detected — likely scraped page text, not real captions' };
+  }
+
+  // Check 6: If we know the video duration, check coverage
+  if (videoDurationSeconds && videoDurationSeconds > 60) {
+    const transcriptDuration = segments[segments.length - 1].end - segments[0].start;
+    const coverage = transcriptDuration / videoDurationSeconds;
+    if (coverage < 0.3) {
+      return { isGood: false, reason: `Transcript covers only ${(coverage * 100).toFixed(0)}% of video duration` };
+    }
+  }
+
+  return { isGood: true, reason: 'Passed quality checks' };
+}
+
 // Priority C: Process from YouTube link
 async function processVideoFromLink(videoId: string, youtubeId: string, supabase: any, startFromStep?: string) {
   const steps = ['metadata', 'captions', 'ai_suggestions'];
   const startIndex = startFromStep ? steps.indexOf(startFromStep) : 0;
   
   try {
+    let videoDurationSeconds: number | undefined;
+
     // Step 1: Fetch metadata
     if (startIndex <= 0) {
       console.log('Step 1: Fetching metadata for video:', videoId);
@@ -717,6 +782,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         return;
       }
 
+      videoDurationSeconds = metadata.duration_seconds;
+
       await supabase
         .from('videos')
         .update({ 
@@ -729,23 +796,66 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       console.log('Metadata fetched:', metadata.title);
     }
 
-    // Step 2: Fetch captions/transcript
+    // Step 2: Fetch captions/transcript with quality check
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
       await supabase.from('videos').update({ processing_step: 'extracting_captions' }).eq('id', videoId);
 
       let transcript = await fetchYouTubeCaptions(youtubeId);
+      let transcriptSource = 'captions';
       
-      // If captions failed, try audio download + transcription fallback
+      // Quality check: evaluate if the fetched transcript is actually good
+      if (transcript && transcript.length > 0) {
+        const quality = evaluateTranscriptQuality(transcript, videoDurationSeconds);
+        if (!quality.isGood) {
+          console.log(`Caption quality check FAILED: ${quality.reason}. Proceeding to audio transcription...`);
+          // Store the weak captions as fallback but try audio first
+          const weakCaptions = transcript;
+          
+          await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
+          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+          
+          if (audioTranscript && audioTranscript.length > 0) {
+            const audioQuality = evaluateTranscriptQuality(audioTranscript, videoDurationSeconds);
+            if (audioQuality.isGood) {
+              console.log('Audio transcription succeeded and passed quality check — using it over weak captions');
+              transcript = audioTranscript;
+              transcriptSource = 'audio_transcription';
+            } else {
+              // Audio also weak — pick whichever has more content
+              const captionWords = weakCaptions.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
+              const audioWords = audioTranscript.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
+              if (audioWords > captionWords) {
+                console.log('Both weak, but audio has more content — using audio');
+                transcript = audioTranscript;
+                transcriptSource = 'audio_transcription';
+              } else {
+                console.log('Both weak, keeping original captions as they have more content');
+                transcriptSource = 'captions';
+              }
+            }
+          } else {
+            console.log('Audio transcription failed or empty — keeping weak captions as fallback');
+            transcriptSource = 'captions';
+          }
+        } else {
+          console.log('Caption quality check PASSED — using fetched captions');
+          transcriptSource = 'captions';
+        }
+      }
+      
+      // If captions were empty/null, try audio transcription
       if (!transcript || transcript.length === 0) {
         console.log('All caption methods failed, trying audio download + transcription...');
         await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
         transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+        if (transcript && transcript.length > 0) {
+          transcriptSource = 'audio_transcription';
+        }
       }
 
       if (!transcript || transcript.length === 0) {
-        // Captions not found - set to needs_attention instead of failed
         await supabase
           .from('videos')
           .update({ 
@@ -759,6 +869,12 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         
         console.log('Captions and audio transcription both failed, set to needs_attention');
         return;
+      }
+
+      // Detect if Gemini fallback was used (check processing_step)
+      const { data: currentState } = await supabase.from('videos').select('processing_step').eq('id', videoId).single();
+      if (currentState?.processing_step === 'transcribing_fallback' && transcriptSource === 'audio_transcription') {
+        transcriptSource = 'gemini_fallback';
       }
 
       await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
@@ -794,7 +910,6 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         return;
       }
 
-      // Calculate total duration from transcript if not set
       const duration = Math.ceil(transcript[transcript.length - 1]?.end || 0);
       
       await supabase
@@ -806,10 +921,11 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           error_message: null,
           failed_step: null,
           processing_step: 'generating_highlights',
+          transcript_source: transcriptSource,
         })
         .eq('id', videoId);
 
-      console.log('Transcript saved with', segments.length, 'segments');
+      console.log(`Transcript saved with ${segments.length} segments (source: ${transcriptSource})`);
     }
 
     // Step 3: Generate AI suggestions
