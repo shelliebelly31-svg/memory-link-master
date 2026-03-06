@@ -54,6 +54,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [isReprocessing, setIsReprocessing] = useState(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
