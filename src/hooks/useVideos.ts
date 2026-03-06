@@ -859,12 +859,15 @@ export function useAddVideoWithSources() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['videos'] });
-      toast({
-        title: 'Video added!',
-        description: 'Your video is being processed. This may take a moment.',
-      });
+      // Toast is handled by the dialog when showing the processing panel
+      if (!result?.video?.id) {
+        toast({
+          title: 'Video added!',
+          description: 'Your video is being processed. This may take a moment.',
+        });
+      }
     },
     onError: (error: Error) => {
       toast({
