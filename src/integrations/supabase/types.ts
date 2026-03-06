@@ -549,6 +549,7 @@ export type Database = {
           error_message: string | null
           failed_step: string | null
           id: string
+          processing_step: string | null
           source_type: string | null
           status: Database["public"]["Enums"]["video_status"]
           thumbnail_url: string | null
@@ -567,6 +568,7 @@ export type Database = {
           error_message?: string | null
           failed_step?: string | null
           id?: string
+          processing_step?: string | null
           source_type?: string | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
@@ -585,6 +587,7 @@ export type Database = {
           error_message?: string | null
           failed_step?: string | null
           id?: string
+          processing_step?: string | null
           source_type?: string | null
           status?: Database["public"]["Enums"]["video_status"]
           thumbnail_url?: string | null
