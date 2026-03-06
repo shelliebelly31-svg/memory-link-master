@@ -1437,61 +1437,57 @@ async function correctTimestampsViaAudio(
   }
 }
 
-// Method 5: Download audio via Cobalt and transcribe with ElevenLabs Scribe v2
+// Method 5: Download audio directly from YouTube stream (Innertube) and transcribe with ElevenLabs Scribe v2
 async function transcribeViaAudioDownload(
   youtubeId: string,
   elevenLabsApiKey: string
 ): Promise<Array<{start: number, end: number, text: string}>> {
-  // Step 1: Download audio via Cobalt API
-  console.log('Method 5: Downloading audio via Cobalt...');
-  
-  const cobaltResponse = await fetch('https://api.cobalt.tools/', {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: `https://www.youtube.com/watch?v=${youtubeId}`,
-      downloadMode: 'audio',
-      audioFormat: 'mp3',
-      audioBitrate: '64',
-    }),
-  });
+  let audioBuffer: ArrayBuffer | null = null;
 
-  if (!cobaltResponse.ok) {
-    const errText = await cobaltResponse.text();
-    console.error('Cobalt API error:', cobaltResponse.status, errText);
+  // Step 1A: Prefer direct audio stream from YouTube player data
+  try {
+    console.log('Method 5: Trying direct audio stream via Innertube...');
+    audioBuffer = await downloadAudioViaInnertube(youtubeId);
+  } catch (e) {
+    console.error('Innertube audio download failed:', e);
+  }
+
+  // Step 1B: Fallback to Invidious companion stream if direct stream is unavailable
+  if (!audioBuffer) {
+    try {
+      console.log('Method 5: Falling back to Invidious audio download...');
+      audioBuffer = await downloadAudioViaInvidious(youtubeId);
+    } catch (e) {
+      console.error('Invidious audio download failed:', e);
+    }
+  }
+
+  // Step 1C: Final fallback to Cobalt
+  if (!audioBuffer) {
+    try {
+      console.log('Method 5: Falling back to Cobalt audio download...');
+      audioBuffer = await downloadAudioViaCobalt(youtubeId);
+    } catch (e) {
+      console.error('Cobalt audio download failed:', e);
+    }
+  }
+
+  if (!audioBuffer) {
+    console.log('Method 5: No audio source available for transcription');
     return [];
   }
 
-  const cobaltData = await cobaltResponse.json();
-  
-  if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
-    console.error('Cobalt did not return a download URL:', cobaltData.status);
-    return [];
-  }
-
-  console.log('Cobalt returned download URL, fetching audio...');
-
-  const audioResponse = await fetch(cobaltData.url);
-  if (!audioResponse.ok) {
-    console.error('Audio download failed:', audioResponse.status);
-    return [];
-  }
-
-  const audioBuffer = await audioResponse.arrayBuffer();
   const audioSizeMB = audioBuffer.byteLength / (1024 * 1024);
-  console.log(`Audio downloaded: ${audioSizeMB.toFixed(1)}MB`);
+  console.log(`Method 5: Audio downloaded (${audioSizeMB.toFixed(1)}MB)`);
 
   if (audioBuffer.byteLength > 25 * 1024 * 1024) {
-    console.log('Audio too large for ElevenLabs (>25MB), skipping');
+    console.log('Method 5: Audio too large for ElevenLabs (>25MB), skipping');
     return [];
   }
 
   // Step 2: Send to ElevenLabs Scribe v2
-  console.log('Sending audio to ElevenLabs for transcription...');
-  
+  console.log('Method 5: Sending audio to ElevenLabs for transcription...');
+
   const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
   const formData = new FormData();
   formData.append('file', audioBlob, 'audio.mp3');
@@ -1516,7 +1512,7 @@ async function transcribeViaAudioDownload(
 
   const sttData = await sttResponse.json();
   const words = sttData.words || [];
-  
+
   if (!words.length) {
     console.log('ElevenLabs returned no words');
     return [];
@@ -1560,6 +1556,153 @@ async function transcribeViaAudioDownload(
   console.log(`Audio transcription: Built ${segments.length} segments with accurate timestamps`);
   return segments;
 }
+
+async function downloadAudioViaInnertube(youtubeId: string): Promise<ArrayBuffer | null> {
+  const response = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
+    body: JSON.stringify({
+      context: {
+        client: {
+          hl: 'en',
+          gl: 'US',
+          clientName: 'WEB',
+          clientVersion: '2.20240101.00.00',
+        },
+      },
+      videoId: youtubeId,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error('Innertube player API returned:', response.status);
+    return null;
+  }
+
+  const data = await response.json();
+  const adaptiveFormats = data?.streamingData?.adaptiveFormats || [];
+
+  const audioFormats = adaptiveFormats
+    .filter((f: any) => typeof f?.mimeType === 'string' && f.mimeType.includes('audio/') && typeof f?.url === 'string')
+    .map((f: any) => ({
+      url: f.url as string,
+      bitrate: Number(f.bitrate || 0),
+      contentLength: Number(f.contentLength || 0),
+      mimeType: f.mimeType as string,
+    }))
+    .sort((a: any, b: any) => {
+      const aSize = a.contentLength || Number.MAX_SAFE_INTEGER;
+      const bSize = b.contentLength || Number.MAX_SAFE_INTEGER;
+      if (aSize !== bSize) return aSize - bSize;
+      return a.bitrate - b.bitrate;
+    });
+
+  if (audioFormats.length === 0) {
+    console.log('Innertube: No direct audio URLs available');
+    return null;
+  }
+
+  const selected = audioFormats.find((f: any) => !f.contentLength || f.contentLength <= 25 * 1024 * 1024) || audioFormats[0];
+  console.log('Innertube: Downloading audio format', selected.mimeType, 'bitrate', selected.bitrate);
+
+  const audioResponse = await fetch(selected.url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    },
+  });
+
+  if (!audioResponse.ok) {
+    console.error('Innertube audio download failed:', audioResponse.status);
+    return null;
+  }
+
+  return await audioResponse.arrayBuffer();
+}
+
+async function downloadAudioViaInvidious(youtubeId: string): Promise<ArrayBuffer | null> {
+  const instances = [
+    'https://inv.nadeko.net',
+    'https://yt.artemislena.eu',
+    'https://invidious.nerdvpn.de',
+  ];
+
+  for (const instance of instances) {
+    try {
+      const url = `${instance}/latest_version?id=${youtubeId}&itag=140`;
+      const response = await fetch(url, {
+        redirect: 'follow',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+      });
+
+      if (!response.ok) {
+        console.log(`Invidious instance failed (${instance}):`, response.status);
+        continue;
+      }
+
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/html') || contentType.includes('application/json')) {
+        console.log(`Invidious instance returned non-audio (${instance}):`, contentType);
+        continue;
+      }
+
+      console.log('Invidious: Downloading audio from', instance);
+      return await response.arrayBuffer();
+    } catch (e) {
+      console.error(`Invidious request failed (${instance}):`, e);
+    }
+  }
+
+  return null;
+}
+
+async function downloadAudioViaCobalt(youtubeId: string): Promise<ArrayBuffer | null> {
+  const cobaltAuthHeader = Deno.env.get('COBALT_AUTH_HEADER');
+  const headers: Record<string, string> = {
+    'Accept': 'application/json',
+    'Content-Type': 'application/json',
+  };
+
+  if (cobaltAuthHeader) {
+    headers['Authorization'] = cobaltAuthHeader;
+  }
+
+  const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      url: `https://www.youtube.com/watch?v=${youtubeId}`,
+      downloadMode: 'audio',
+      audioFormat: 'mp3',
+      audioBitrate: '64',
+    }),
+  });
+
+  if (!cobaltResponse.ok) {
+    const errText = await cobaltResponse.text();
+    console.error('Cobalt API error:', cobaltResponse.status, errText);
+    return null;
+  }
+
+  const cobaltData = await cobaltResponse.json();
+  if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
+    console.error('Cobalt did not return a download URL:', cobaltData.status);
+    return null;
+  }
+
+  const audioResponse = await fetch(cobaltData.url);
+  if (!audioResponse.ok) {
+    console.error('Cobalt audio download failed:', audioResponse.status);
+    return null;
+  }
+
+  return await audioResponse.arrayBuffer();
+}
+
 
 async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
   try {
