@@ -20,6 +20,3 @@ verify_jwt = false
 
 [functions.re-segment-transcript]
 verify_jwt = false
-
-[functions.send-sms]
-verify_jwt = false

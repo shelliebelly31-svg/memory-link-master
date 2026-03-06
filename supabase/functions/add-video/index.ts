@@ -647,8 +647,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
-      const captionResult = await fetchYouTubeCaptions(youtubeId);
-      const transcript = captionResult.segments;
+      const transcript = await fetchYouTubeCaptions(youtubeId);
       
       if (!transcript || transcript.length === 0) {
         // Captions not found - set to needs_attention instead of failed
@@ -712,9 +711,6 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         .eq('id', videoId);
 
       console.log('Transcript saved with', segments.length, 'segments');
-
-      // Note: If Firecrawl was used, timestamps are estimated.
-      // Users can manually trigger timestamp correction via the "Fix Timestamps" button.
     }
 
     // Step 3: Generate AI suggestions
@@ -845,12 +841,7 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
   }
 }
 
-interface CaptionResult {
-  segments: Array<{start: number, end: number, text: string}>;
-  method: 'innertube' | 'html_scrape' | 'timedtext' | 'firecrawl' | 'audio_transcription' | 'none';
-}
-
-async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
+async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
   // Try multiple methods in order of reliability
   
   // Method 1: Innertube API (most reliable)
@@ -859,7 +850,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     const innertubeResult = await fetchCaptionsViaInnertube(youtubeId);
     if (innertubeResult.length > 0) {
       console.log(`Innertube: Got ${innertubeResult.length} segments`);
-      return { segments: innertubeResult, method: 'innertube' };
+      return innertubeResult;
     }
   } catch (e) {
     console.error('Innertube method failed:', e);
@@ -871,7 +862,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     const htmlResult = await fetchCaptionsViaHtmlScrape(youtubeId);
     if (htmlResult.length > 0) {
       console.log(`HTML scrape: Got ${htmlResult.length} segments`);
-      return { segments: htmlResult, method: 'html_scrape' };
+      return htmlResult;
     }
   } catch (e) {
     console.error('HTML scrape method failed:', e);
@@ -883,64 +874,49 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     const timedtextResult = await fetchCaptionsViaTimedtext(youtubeId);
     if (timedtextResult.length > 0) {
       console.log(`Timedtext: Got ${timedtextResult.length} segments`);
-      return { segments: timedtextResult, method: 'timedtext' };
+      return timedtextResult;
     }
   } catch (e) {
     console.error('Timedtext method failed:', e);
   }
 
-  // Method 4: Firecrawl scrape (last resort - extracts page content as transcript substitute)
+  // Method 4: Firecrawl scrape (extracts page content as transcript substitute)
   try {
     const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
     if (FIRECRAWL_API_KEY) {
-      console.log('Method 5: Trying Firecrawl scrape for', youtubeId);
+      console.log('Method 4: Trying Firecrawl scrape for', youtubeId);
       const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
       if (firecrawlResult.length > 0) {
         console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
-        return { segments: firecrawlResult, method: 'firecrawl' };
+        return firecrawlResult;
       }
     } else {
-      console.log('Firecrawl not configured, skipping Method 5');
+      console.log('Firecrawl not configured, skipping Method 4');
     }
   } catch (e) {
     console.error('Firecrawl method failed:', e);
   }
 
   console.log('All caption methods failed for', youtubeId);
-  return { segments: [], method: 'none' };
+  return [];
 }
 
-// Method 4: Use Firecrawl to scrape YouTube page content, then AI to extract only spoken words
+// Method 4: Use Firecrawl to scrape YouTube page content
 async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Promise<Array<{start: number, end: number, text: string}>> {
   const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
   
-  // Use AbortController for a 45-second timeout
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 45000);
-
-  let response: Response;
-  try {
-    response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: videoUrl,
-        formats: ['markdown'],
-        onlyMainContent: true,
-        waitFor: 5000,
-        timeout: 60000,
-      }),
-      signal: controller.signal,
-    });
-  } catch (e) {
-    clearTimeout(timeoutId);
-    console.error('Firecrawl fetch error (timeout or network):', e);
-    return [];
-  }
-  clearTimeout(timeoutId);
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: videoUrl,
+      formats: ['markdown'],
+      onlyMainContent: true,
+    }),
+  });
 
   if (!response.ok) {
     console.error('Firecrawl API error:', response.status);
@@ -950,165 +926,36 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
   const data = await response.json();
   const markdown = data?.data?.markdown || data?.markdown || '';
   
-  if (!markdown || markdown.trim().length < 20) {
+  if (!markdown || markdown.trim().length < 100) {
     console.log('Firecrawl: Not enough content extracted');
     return [];
   }
 
-  // Build a plain-text fallback candidate from markdown in case AI extraction fails
-  const fallbackPlainText = markdown
-    .replace(/```[\s\S]*?```/g, ' ')
-    .replace(/\[(.*?)\]\((.*?)\)/g, ' $1 ')
-    .replace(/https?:\/\/\S+/g, ' ')
-    .replace(/[#>*_`~|]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+  // Parse the markdown content into transcript-like segments
+  // Split by paragraphs and assign approximate timestamps
+  const paragraphs = markdown
+    .split(/\n\n+/)
+    .map((p: string) => p.replace(/\n/g, ' ').trim())
+    .filter((p: string) => p.length > 20 && !p.startsWith('#') && !p.startsWith('[') && !p.startsWith('!'));
 
-  // Use AI to extract only the spoken transcript, filtering out title, description, metadata
-  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
-  if (!LOVABLE_API_KEY) {
-    console.log('No LOVABLE_API_KEY, using Firecrawl raw-text fallback');
-    return buildEstimatedSegmentsFromText(fallbackPlainText);
-  }
+  if (paragraphs.length === 0) return [];
 
-  try {
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          {
-            role: 'system',
-            content: `You are a transcript extractor. Given scraped YouTube page content, extract ONLY the spoken words/transcript from the video. 
-
-CRITICAL RULES:
-- Extract ONLY words that were SPOKEN in the video
-- Look for the transcript section (timestamped lines like "0:00 text", "1:23 text") - this is the most reliable source
-- If timestamps are present, preserve them in each paragraph
-- Remove ALL of the following:
-  - Video title, description, channel info
-  - Subscriber counts, view counts, like counts
-  - Links, URLs, hashtags
-  - Comments section content
-  - Related/recommended video titles and descriptions  
-  - Upload dates, metadata
-  - Navigation elements, buttons
-  - Copyright notices
-  - Any text from OTHER videos (recommendations, playlist items)
-
-Return ONLY the actual spoken words as a clean transcript. Split into natural paragraphs (one paragraph per topic shift or every ~30 seconds of speech). 
-Return as a JSON object with a "paragraphs" array of strings.
-If you cannot identify any spoken transcript content, return {"paragraphs": []}.`
-          },
-          {
-            role: 'user',
-            content: `Extract the spoken transcript from this YouTube page content. IMPORTANT: Only extract words that were actually SPOKEN in this specific video. Do NOT include text from video descriptions, comments, or recommended videos.\n\n${markdown.slice(0, 15000)}`
-          }
-        ],
-        response_format: { type: 'json_object' },
-      }),
-    });
-
-    if (!aiResponse.ok) {
-      console.error('AI cleanup failed:', aiResponse.status);
-      const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
-      console.log(`Firecrawl fallback: Built ${fallbackSegments.length} estimated segments from raw markdown`);
-      return fallbackSegments;
-    }
-
-    const aiResult = await aiResponse.json();
-    const content = aiResult.choices?.[0]?.message?.content;
-
-    let paragraphs: string[] = [];
-    if (content) {
-      try {
-        const parsed = JSON.parse(content);
-        paragraphs = Array.isArray(parsed?.paragraphs) ? parsed.paragraphs : [];
-      } catch (e) {
-        console.error('Failed to parse AI transcript response');
-      }
-    }
-
-    if (paragraphs.length > 0) {
-      // Estimate total duration: ~150 words per minute of speech
-      const totalWords = paragraphs.reduce((sum, p) => sum + p.split(/\s+/).filter(Boolean).length, 0);
-      const estimatedDurationSeconds = Math.max(60, (totalWords / 150) * 60);
-
-      const segments: Array<{start: number, end: number, text: string}> = [];
-      let wordsSoFar = 0;
-
-      for (const para of paragraphs) {
-        const paraWords = para.split(/\s+/).filter(Boolean).length;
-        const startTime = Math.round((wordsSoFar / Math.max(totalWords, 1)) * estimatedDurationSeconds);
-        wordsSoFar += paraWords;
-        const endTime = Math.round((wordsSoFar / Math.max(totalWords, 1)) * estimatedDurationSeconds);
-
-        segments.push({
-          start: startTime,
-          end: endTime,
-          text: para.trim(),
-        });
-      }
-
-      console.log(`Firecrawl+AI: Extracted ${segments.length} clean segments (~${Math.round(estimatedDurationSeconds)}s estimated)`);
-      return segments;
-    }
-
-    const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
-    console.log(`Firecrawl fallback: Built ${fallbackSegments.length} estimated segments from raw markdown`);
-    return fallbackSegments;
-
-  } catch (e) {
-    console.error('AI transcript extraction failed:', e);
-    const fallbackSegments = buildEstimatedSegmentsFromText(fallbackPlainText);
-    console.log(`Firecrawl fallback (after AI exception): Built ${fallbackSegments.length} estimated segments from raw markdown`);
-    return fallbackSegments;
-  }
-}
-
-function buildEstimatedSegmentsFromText(text: string): Array<{start: number, end: number, text: string}> {
-  const normalized = text.replace(/\s+/g, ' ').trim();
-  if (!normalized) return [];
-
-  const lightlyFiltered = normalized
-    .replace(/\b(subscribe|like|comment|share|playlist|channel|views?|followers?)\b/gi, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
-  const source = lightlyFiltered.length > 120 ? lightlyFiltered : normalized;
-  const words = source.split(/\s+/).filter(Boolean);
-
-  if (words.length < 8) {
-    return [];
-  }
-
-  const wordsPerSecond = 2.5;
-  const targetWordsPerSegment = 45;
   const segments: Array<{start: number, end: number, text: string}> = [];
+  let currentTime = 0;
+  const avgSegmentDuration = 30; // approximate 30s per paragraph
 
-  for (let i = 0; i < words.length; i += targetWordsPerSegment) {
-    const chunk = words.slice(i, i + targetWordsPerSegment);
-    if (chunk.length < 8) continue;
-
-    const start = Math.round((i / wordsPerSecond) * 10) / 10;
-    const end = Math.round(((i + chunk.length) / wordsPerSecond) * 10) / 10;
-
+  for (const para of paragraphs) {
     segments.push({
-      start,
-      end,
-      text: chunk.join(' ').trim(),
+      start: currentTime,
+      end: currentTime + avgSegmentDuration,
+      text: para,
     });
+    currentTime += avgSegmentDuration;
   }
 
-  if (segments.length === 0) {
-    const previewWords = words.slice(0, 45);
-    if (previewWords.length >= 8) {
-      return [{ start: 0, end: Math.max(15, Math.round((previewWords.length / wordsPerSecond) * 10) / 10), text: previewWords.join(' ') }];
-    }
+  // Update end times
+  for (let i = 0; i < segments.length - 1; i++) {
+    segments[i].end = segments[i + 1].start;
   }
 
   return segments;
@@ -1307,497 +1154,6 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
   console.log(`Combined into ${combined.length} segments`);
   return combined;
 }
-
-// Correct estimated timestamps by downloading audio and transcribing with ElevenLabs
-async function correctTimestampsViaAudio(
-  videoId: string, 
-  youtubeId: string, 
-  firecrawlSegments: Array<{start: number, end: number, text: string}>,
-  supabase: any
-) {
-  const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
-  if (!ELEVENLABS_API_KEY) {
-    console.log('No ELEVENLABS_API_KEY, skipping timestamp correction');
-    return;
-  }
-
-  try {
-    // Step 1: Download audio via Cobalt API
-    console.log('Downloading audio for timestamp correction via Cobalt...');
-    
-    const cobaltResponse = await fetch('https://api.cobalt.tools/', {
-      method: 'POST',
-      headers: {
-        'Accept': 'application/json',
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        url: `https://www.youtube.com/watch?v=${youtubeId}`,
-        downloadMode: 'audio',
-        audioFormat: 'mp3',
-        audioBitrate: '64',
-      }),
-    });
-
-    if (!cobaltResponse.ok) {
-      const errText = await cobaltResponse.text();
-      console.error('Cobalt API error:', cobaltResponse.status, errText);
-      return;
-    }
-
-    const cobaltData = await cobaltResponse.json();
-    
-    if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
-      console.error('Cobalt did not return a download URL:', cobaltData.status);
-      return;
-    }
-
-    console.log('Cobalt returned download URL, fetching audio...');
-
-    // Step 2: Download the actual audio file
-    const audioResponse = await fetch(cobaltData.url);
-    if (!audioResponse.ok) {
-      console.error('Audio download failed:', audioResponse.status);
-      return;
-    }
-
-    const audioBuffer = await audioResponse.arrayBuffer();
-    const audioSizeMB = audioBuffer.byteLength / (1024 * 1024);
-    console.log(`Audio downloaded: ${audioSizeMB.toFixed(1)}MB`);
-
-    // ElevenLabs has a 25MB limit
-    if (audioBuffer.byteLength > 25 * 1024 * 1024) {
-      console.log('Audio too large for ElevenLabs (>25MB), skipping timestamp correction');
-      return;
-    }
-
-    // Step 3: Send to ElevenLabs Scribe v2 for word-level timestamps
-    console.log('Sending audio to ElevenLabs for transcription...');
-    
-    const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-    const formData = new FormData();
-    formData.append('file', audioBlob, 'audio.mp3');
-    formData.append('model_id', 'scribe_v2');
-    formData.append('tag_audio_events', 'false');
-    formData.append('diarize', 'false');
-    formData.append('timestamps_granularity', 'word');
-
-    const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-      method: 'POST',
-      headers: {
-        'xi-api-key': ELEVENLABS_API_KEY,
-      },
-      body: formData,
-    });
-
-    if (!sttResponse.ok) {
-      const errText = await sttResponse.text();
-      console.error('ElevenLabs STT error:', sttResponse.status, errText);
-      return;
-    }
-
-    const sttData = await sttResponse.json();
-    const words = sttData.words || [];
-    
-    if (!words.length || !words.some((w: any) => (w.start || 0) > 0 || (w.end || 0) > 0)) {
-      console.log('ElevenLabs returned no valid word timestamps, skipping correction');
-      return;
-    }
-
-    console.log(`ElevenLabs returned ${words.length} words with timestamps`);
-
-    // Step 4: Build corrected segments by grouping words into ~15-second segments
-    const correctedSegments: Array<{start: number, end: number, text: string}> = [];
-    let currentSegment: { start: number; end: number; words: string[] } | null = null;
-
-    for (const word of words) {
-      const wordStart = word.start || 0;
-      const wordEnd = word.end || wordStart + 0.5;
-      const wordText = (word.text || '').trim();
-      if (!wordText) continue;
-
-      if (!currentSegment) {
-        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-      } else if (wordEnd - currentSegment.start >= 15) {
-        correctedSegments.push({
-          start: Math.round(currentSegment.start * 10) / 10,
-          end: Math.round(currentSegment.end * 10) / 10,
-          text: currentSegment.words.join(' ').trim(),
-        });
-        currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-      } else {
-        currentSegment.end = wordEnd;
-        currentSegment.words.push(wordText);
-      }
-    }
-
-    if (currentSegment && currentSegment.words.length > 0) {
-      correctedSegments.push({
-        start: Math.round(currentSegment.start * 10) / 10,
-        end: Math.round(currentSegment.end * 10) / 10,
-        text: currentSegment.words.join(' ').trim(),
-      });
-    }
-
-    if (correctedSegments.length === 0) {
-      console.log('No corrected segments produced, keeping Firecrawl timestamps');
-      return;
-    }
-
-    // Step 5: Replace transcript segments in database
-    console.log(`Replacing ${firecrawlSegments.length} estimated segments with ${correctedSegments.length} accurately-timed segments`);
-
-    await supabase
-      .from('transcript_segments')
-      .delete()
-      .eq('video_id', videoId);
-
-    const segmentRows = correctedSegments.map(seg => ({
-      video_id: videoId,
-      start_seconds: seg.start,
-      end_seconds: seg.end,
-      text: seg.text,
-    }));
-
-    const { error: insertError } = await supabase
-      .from('transcript_segments')
-      .insert(segmentRows);
-
-    if (insertError) {
-      console.error('Failed to insert corrected segments:', insertError);
-      return;
-    }
-
-    // Update video duration from accurate timestamps
-    const accurateDuration = Math.ceil(correctedSegments[correctedSegments.length - 1].end);
-    await supabase
-      .from('videos')
-      .update({ duration_seconds: accurateDuration })
-      .eq('id', videoId);
-
-    console.log(`Timestamp correction complete! ${correctedSegments.length} segments with accurate timestamps saved.`);
-
-  } catch (error) {
-    console.error('Error in correctTimestampsViaAudio:', error);
-  }
-}
-
-// Method 5: Download audio directly from YouTube stream (Innertube) and transcribe with ElevenLabs Scribe v2
-async function transcribeViaAudioDownload(
-  youtubeId: string,
-  elevenLabsApiKey: string
-): Promise<Array<{start: number, end: number, text: string}>> {
-  let audioBuffer: ArrayBuffer | null = null;
-
-  // Step 1A: Prefer direct audio stream from YouTube player data
-  try {
-    console.log('Method 5: Trying direct audio stream via Innertube...');
-    audioBuffer = await downloadAudioViaInnertube(youtubeId);
-  } catch (e) {
-    console.error('Innertube audio download failed:', e);
-  }
-
-  // Step 1B: Fallback to Invidious companion stream if direct stream is unavailable
-  if (!audioBuffer) {
-    try {
-      console.log('Method 5: Falling back to Invidious audio download...');
-      audioBuffer = await downloadAudioViaInvidious(youtubeId);
-    } catch (e) {
-      console.error('Invidious audio download failed:', e);
-    }
-  }
-
-  // Step 1C: Final fallback to Cobalt
-  if (!audioBuffer) {
-    try {
-      console.log('Method 5: Falling back to Cobalt audio download...');
-      audioBuffer = await downloadAudioViaCobalt(youtubeId);
-    } catch (e) {
-      console.error('Cobalt audio download failed:', e);
-    }
-  }
-
-  if (!audioBuffer) {
-    console.log('Method 5: No audio source available for transcription');
-    return [];
-  }
-
-  const audioSizeMB = audioBuffer.byteLength / (1024 * 1024);
-  console.log(`Method 5: Audio downloaded (${audioSizeMB.toFixed(1)}MB)`);
-
-  if (audioBuffer.byteLength > 25 * 1024 * 1024) {
-    console.log('Method 5: Audio too large for ElevenLabs (>25MB), skipping');
-    return [];
-  }
-
-  // Step 2: Send to ElevenLabs Scribe v2
-  console.log('Method 5: Sending audio to ElevenLabs for transcription...');
-
-  const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
-  const formData = new FormData();
-  formData.append('file', audioBlob, 'audio.mp3');
-  formData.append('model_id', 'scribe_v2');
-  formData.append('tag_audio_events', 'false');
-  formData.append('diarize', 'false');
-  formData.append('timestamps_granularity', 'word');
-
-  const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
-    method: 'POST',
-    headers: {
-      'xi-api-key': elevenLabsApiKey,
-    },
-    body: formData,
-  });
-
-  if (!sttResponse.ok) {
-    const errText = await sttResponse.text();
-    console.error('ElevenLabs STT error:', sttResponse.status, errText);
-    return [];
-  }
-
-  const sttData = await sttResponse.json();
-  const words = sttData.words || [];
-
-  if (!words.length) {
-    console.log('ElevenLabs returned no words');
-    return [];
-  }
-
-  console.log(`ElevenLabs returned ${words.length} words with timestamps`);
-
-  // Step 3: Group words into ~15-second segments
-  const segments: Array<{start: number, end: number, text: string}> = [];
-  let currentSegment: { start: number; end: number; words: string[] } | null = null;
-
-  for (const word of words) {
-    const wordStart = word.start || 0;
-    const wordEnd = word.end || wordStart + 0.5;
-    const wordText = (word.text || '').trim();
-    if (!wordText) continue;
-
-    if (!currentSegment) {
-      currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-    } else if (wordEnd - currentSegment.start >= 15) {
-      segments.push({
-        start: Math.round(currentSegment.start * 10) / 10,
-        end: Math.round(currentSegment.end * 10) / 10,
-        text: currentSegment.words.join(' ').trim(),
-      });
-      currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
-    } else {
-      currentSegment.end = wordEnd;
-      currentSegment.words.push(wordText);
-    }
-  }
-
-  if (currentSegment && currentSegment.words.length > 0) {
-    segments.push({
-      start: Math.round(currentSegment.start * 10) / 10,
-      end: Math.round(currentSegment.end * 10) / 10,
-      text: currentSegment.words.join(' ').trim(),
-    });
-  }
-
-  console.log(`Audio transcription: Built ${segments.length} segments with accurate timestamps`);
-  return segments;
-}
-
-async function downloadAudioViaInnertube(youtubeId: string): Promise<ArrayBuffer | null> {
-  // Try multiple clients - iOS and TV_EMBEDDED are most reliable for audio streams
-  const clients = [
-    {
-      clientName: 'IOS',
-      clientVersion: '19.09.3',
-      apiKey: 'AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc',
-      userAgent: 'com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)',
-      extraContext: { deviceMake: 'Apple', deviceModel: 'iPhone14,3', osName: 'iPhone', osVersion: '15.6.0.19G71' },
-    },
-    {
-      clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
-      clientVersion: '2.0',
-      apiKey: '',
-      userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5)',
-      extraContext: {},
-    },
-    {
-      clientName: 'ANDROID_MUSIC',
-      clientVersion: '6.42.52',
-      apiKey: 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI',
-      userAgent: 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 11) gzip',
-      extraContext: { androidSdkVersion: 30, platform: 'MOBILE' },
-    },
-    {
-      clientName: 'WEB',
-      clientVersion: '2.20240101.00.00',
-      apiKey: '',
-      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      extraContext: {},
-    },
-  ];
-
-  for (const client of clients) {
-    try {
-      const url = client.apiKey 
-        ? `https://www.youtube.com/youtubei/v1/player?prettyPrint=false&key=${client.apiKey}`
-        : 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
-      
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': client.userAgent,
-        },
-        body: JSON.stringify({
-          context: {
-            client: {
-              hl: 'en',
-              gl: 'US',
-              clientName: client.clientName,
-              clientVersion: client.clientVersion,
-              ...client.extraContext,
-            },
-            ...(client.clientName === 'TVHTML5_SIMPLY_EMBEDDED_PLAYER' ? {
-              thirdParty: { embedUrl: 'https://www.youtube.com/' }
-            } : {}),
-          },
-          videoId: youtubeId,
-        }),
-      });
-
-      if (!response.ok) {
-        console.log(`Innertube ${client.clientName} returned:`, response.status);
-        continue;
-      }
-
-      const data = await response.json();
-      const adaptiveFormats = data?.streamingData?.adaptiveFormats || [];
-
-      // Also check for signatureCipher-based formats (no direct URL)
-      const audioFormats = adaptiveFormats
-        .filter((f: any) => typeof f?.mimeType === 'string' && f.mimeType.includes('audio/') && typeof f?.url === 'string')
-        .map((f: any) => ({
-          url: f.url as string,
-          bitrate: Number(f.bitrate || 0),
-          contentLength: Number(f.contentLength || 0),
-          mimeType: f.mimeType as string,
-        }))
-        .sort((a: any, b: any) => {
-          const aSize = a.contentLength || Number.MAX_SAFE_INTEGER;
-          const bSize = b.contentLength || Number.MAX_SAFE_INTEGER;
-          if (aSize !== bSize) return aSize - bSize;
-          return a.bitrate - b.bitrate;
-        });
-
-      if (audioFormats.length === 0) {
-        console.log(`Innertube ${client.clientName}: No direct audio URLs available`);
-        continue;
-      }
-
-      const selected = audioFormats.find((f: any) => !f.contentLength || f.contentLength <= 25 * 1024 * 1024) || audioFormats[0];
-      console.log(`Innertube ${client.clientName}: Downloading audio format`, selected.mimeType, 'bitrate', selected.bitrate);
-
-      const audioResponse = await fetch(selected.url, {
-        headers: {
-          'User-Agent': client.userAgent,
-        },
-      });
-
-      if (!audioResponse.ok) {
-        console.error(`Innertube ${client.clientName} audio download failed:`, audioResponse.status);
-        continue;
-      }
-
-      return await audioResponse.arrayBuffer();
-    } catch (e) {
-      console.error(`Innertube ${client.clientName} failed:`, e);
-      continue;
-    }
-  }
-
-  return null;
-}
-
-async function downloadAudioViaInvidious(youtubeId: string): Promise<ArrayBuffer | null> {
-  const instances = [
-    'https://inv.nadeko.net',
-    'https://yt.artemislena.eu',
-    'https://invidious.nerdvpn.de',
-  ];
-
-  for (const instance of instances) {
-    try {
-      const url = `${instance}/latest_version?id=${youtubeId}&itag=140`;
-      const response = await fetch(url, {
-        redirect: 'follow',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-        },
-      });
-
-      if (!response.ok) {
-        console.log(`Invidious instance failed (${instance}):`, response.status);
-        continue;
-      }
-
-      const contentType = response.headers.get('content-type') || '';
-      if (contentType.includes('text/html') || contentType.includes('application/json')) {
-        console.log(`Invidious instance returned non-audio (${instance}):`, contentType);
-        continue;
-      }
-
-      console.log('Invidious: Downloading audio from', instance);
-      return await response.arrayBuffer();
-    } catch (e) {
-      console.error(`Invidious request failed (${instance}):`, e);
-    }
-  }
-
-  return null;
-}
-
-async function downloadAudioViaCobalt(youtubeId: string): Promise<ArrayBuffer | null> {
-  const cobaltAuthHeader = Deno.env.get('COBALT_AUTH_HEADER');
-  const headers: Record<string, string> = {
-    'Accept': 'application/json',
-    'Content-Type': 'application/json',
-  };
-
-  if (cobaltAuthHeader) {
-    headers['Authorization'] = cobaltAuthHeader;
-  }
-
-  const cobaltResponse = await fetch('https://api.cobalt.tools/', {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({
-      url: `https://www.youtube.com/watch?v=${youtubeId}`,
-      downloadMode: 'audio',
-      audioFormat: 'mp3',
-      audioBitrate: '64',
-    }),
-  });
-
-  if (!cobaltResponse.ok) {
-    const errText = await cobaltResponse.text();
-    console.error('Cobalt API error:', cobaltResponse.status, errText);
-    return null;
-  }
-
-  const cobaltData = await cobaltResponse.json();
-  if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
-    console.error('Cobalt did not return a download URL:', cobaltData.status);
-    return null;
-  }
-
-  const audioResponse = await fetch(cobaltData.url);
-  if (!audioResponse.ok) {
-    console.error('Cobalt audio download failed:', audioResponse.status);
-    return null;
-  }
-
-  return await audioResponse.arrayBuffer();
-}
-
 
 async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
   try {

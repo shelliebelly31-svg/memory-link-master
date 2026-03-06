@@ -38,29 +38,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  // Sign out on browser close if "Keep me logged in" was unchecked
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      if (sessionStorage.getItem('session_only') === 'true') {
-        // Use sendBeacon to ensure sign-out request is sent
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
-        const accessToken = session?.access_token;
-        if (supabaseUrl && accessToken) {
-          navigator.sendBeacon(
-            `${supabaseUrl}/auth/v1/logout`,
-            new Blob([JSON.stringify({})], { type: 'application/json' })
-          );
-        }
-        // Clear local storage to prevent auto-login on next visit
-        localStorage.removeItem(`sb-${import.meta.env.VITE_SUPABASE_PROJECT_ID}-auth-token`);
-      }
-    };
-
-    window.addEventListener('beforeunload', handleBeforeUnload);
-    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
-  }, [session]);
-
   const signIn = async (email: string, password: string) => {
     const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };

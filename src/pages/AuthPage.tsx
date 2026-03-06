@@ -1,14 +1,13 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Mail, Lock, Eye, EyeOff, ArrowRight, Loader2 } from 'lucide-react';
-import { Checkbox } from '@/components/ui/checkbox';
 import memoryLinkIcon from '@/assets/memory-link-icon.png';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useToast } from '@/hooks/use-toast';
 
 interface AuthPageProps {
-  onAuth: (email: string, password: string, isSignUp: boolean, rememberMe: boolean) => Promise<void>;
+  onAuth: (email: string, password: string, isSignUp: boolean) => Promise<void>;
 }
 
 export default function AuthPage({ onAuth }: AuthPageProps) {
@@ -16,7 +15,6 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [rememberMe, setRememberMe] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
   const { toast } = useToast();
 
@@ -43,7 +41,7 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
 
     setIsLoading(true);
     try {
-      await onAuth(email, password, isSignUp, rememberMe);
+      await onAuth(email, password, isSignUp);
     } catch (error: any) {
       toast({
         title: 'Error',
@@ -104,22 +102,6 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
                 </button>
               </div>
             </div>
-
-            {!isSignUp && (
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="remember-me"
-                  checked={rememberMe}
-                  onCheckedChange={(checked) => setRememberMe(checked === true)}
-                />
-                <label
-                  htmlFor="remember-me"
-                  className="text-sm text-muted-foreground cursor-pointer select-none"
-                >
-                  Keep me logged in
-                </label>
-              </div>
-            )}
 
             <Button
               type="submit"
