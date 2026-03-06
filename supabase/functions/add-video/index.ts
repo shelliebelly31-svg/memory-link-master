@@ -1378,6 +1378,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
 
     try {
       console.log('Audio fallback: Trying Gemini transcription...');
+      if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing_fallback' }).eq('id', videoId);
       const audioBytes = new Uint8Array(audioBuffer);
       let base64Audio = '';
       const chunkSize = 8192;
