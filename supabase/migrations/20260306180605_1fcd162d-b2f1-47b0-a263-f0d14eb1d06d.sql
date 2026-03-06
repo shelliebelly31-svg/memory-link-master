@@ -1,0 +1,1 @@
+ALTER TABLE public.videos ADD COLUMN processing_step text DEFAULT null;

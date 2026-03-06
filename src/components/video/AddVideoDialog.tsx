@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/dialog';
 import { useToast } from '@/hooks/use-toast';
 import { cn } from '@/lib/utils';
+import { ProcessingPanel } from './ProcessingPanel';
 
 interface AddVideoDialogProps {
   onAddVideo: (data: {
@@ -20,7 +21,7 @@ interface AddVideoDialogProps {
     transcript_text?: string;
     screenshot_base64_list?: string[];
     audio_file?: File;
-  }) => Promise<void>;
+  }) => Promise<any>;
   triggerButton?: React.ReactNode;
 }
 
@@ -33,6 +34,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
   const [audioFile, setAudioFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [loadingStep, setLoadingStep] = useState<string>('');
+  const [processingVideoId, setProcessingVideoId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const audioInputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
@@ -64,7 +66,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const maxSize = 20 * 1024 * 1024; // 20MB
+    const maxSize = 20 * 1024 * 1024;
     if (file.size > maxSize) {
       toast({
         title: 'File too large',
@@ -89,6 +91,7 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     setScreenshotPreviews([]);
     setAudioFile(null);
     setLoadingStep('');
+    setProcessingVideoId(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (audioInputRef.current) audioInputRef.current.value = '';
   };
@@ -126,37 +129,91 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     setLoadingStep(hasAudio ? 'Uploading & transcribing...' : 'Adding...');
     
     try {
-      await onAddVideo({
+      const result = await onAddVideo({
         youtube_url: hasUrl ? url : undefined,
         transcript_text: hasText ? transcriptText : undefined,
         screenshot_base64_list: hasScreenshots ? screenshots : undefined,
         audio_file: hasAudio ? audioFile : undefined,
       });
-      toast({
-        title: 'Video added!',
-        description: hasAudio 
-          ? 'Your audio is being transcribed. This may take a minute.'
-          : 'Your video is being processed. This may take a few minutes.',
-      });
-      resetForm();
-      setOpen(false);
+
+      // If we got a video ID back, show the processing panel
+      const videoId = result?.video?.id;
+      if (videoId && hasUrl) {
+        setProcessingVideoId(videoId);
+        setIsLoading(false);
+        setLoadingStep('');
+      } else {
+        // For text/screenshot/audio, close immediately
+        toast({
+          title: 'Video added!',
+          description: hasAudio 
+            ? 'Your audio is being transcribed. This may take a minute.'
+            : 'Your video is being processed.',
+        });
+        resetForm();
+        setOpen(false);
+      }
     } catch (error) {
       toast({
         title: 'Error',
         description: error instanceof Error ? error.message : 'Failed to add video. Please try again.',
         variant: 'destructive',
       });
-    } finally {
       setIsLoading(false);
       setLoadingStep('');
     }
   };
 
+  const handleDialogClose = (newOpen: boolean) => {
+    if (!newOpen) {
+      resetForm();
+    }
+    setOpen(newOpen);
+  };
+
+  // Show processing panel after submission
+  if (processingVideoId) {
+    return (
+      <Dialog open={open} onOpenChange={handleDialogClose}>
+        <DialogTrigger asChild>
+          {triggerButton || (
+            <Button variant="glow" size="lg" className="gap-2">
+              <Plus className="h-5 w-5" />
+              Add Video
+            </Button>
+          )}
+        </DialogTrigger>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="text-xl">Processing Video</DialogTitle>
+          </DialogHeader>
+          <div className="mt-2">
+            <ProcessingPanel 
+              videoId={processingVideoId}
+              onComplete={() => {
+                // Don't auto-close, let user click "View Transcript"
+              }}
+            />
+            <div className="mt-4 pt-3 border-t border-border">
+              <Button 
+                variant="outline" 
+                className="w-full" 
+                onClick={() => {
+                  resetForm();
+                  setOpen(false);
+                }}
+              >
+                Close & Process in Background
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+    );
+  }
+
   return (
-    <Dialog open={open} onOpenChange={(newOpen) => {
-      setOpen(newOpen);
-      if (!newOpen) resetForm();
-    }}>
+    <Dialog open={open} onOpenChange={handleDialogClose}>
       <DialogTrigger asChild>
         {triggerButton || (
           <Button variant="glow" size="lg" className="gap-2">

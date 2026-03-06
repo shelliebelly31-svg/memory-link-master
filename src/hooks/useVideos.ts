@@ -13,6 +13,8 @@ export function getDisplayStatus(status: VideoStatus): DisplayStatus {
   return status as DisplayStatus;
 }
 
+export type ProcessingStep = 'processing' | 'extracting_captions' | 'downloading_audio' | 'transcribing' | 'transcribing_fallback' | 'segmenting' | 'generating_highlights' | 'ready' | 'failed';
+
 export interface Video {
   id: string;
   user_id: string;
@@ -22,6 +24,7 @@ export interface Video {
   thumbnail_url: string | null;
   duration_seconds: number | null;
   status: VideoStatus;
+  processing_step: ProcessingStep | null;
   error_message: string | null;
   failed_step: string | null;
   captions_missing: boolean;
@@ -29,6 +32,7 @@ export interface Video {
   ai_suggestions_generated_at: string | null;
   created_at: string;
   updated_at: string;
+  source_type: string | null;
 }
 
 export interface TranscriptSegment {
@@ -855,12 +859,15 @@ export function useAddVideoWithSources() {
 
       return response.json();
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['videos'] });
-      toast({
-        title: 'Video added!',
-        description: 'Your video is being processed. This may take a moment.',
-      });
+      // Toast is handled by the dialog when showing the processing panel
+      if (!result?.video?.id) {
+        toast({
+          title: 'Video added!',
+          description: 'Your video is being processed. This may take a moment.',
+        });
+      }
     },
     onError: (error: Error) => {
       toast({

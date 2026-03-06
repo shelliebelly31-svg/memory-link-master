@@ -700,7 +700,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       
       await supabase
         .from('videos')
-        .update({ status: 'transcribing' })
+        .update({ status: 'transcribing', processing_step: 'processing' })
         .eq('id', videoId);
 
       const metadata = await fetchVideoMetadata(youtubeId);
@@ -733,12 +733,15 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
     if (startIndex <= 1) {
       console.log('Step 2: Fetching captions for video:', videoId);
 
+      await supabase.from('videos').update({ processing_step: 'extracting_captions' }).eq('id', videoId);
+
       let transcript = await fetchYouTubeCaptions(youtubeId);
       
       // If captions failed, try audio download + transcription fallback
       if (!transcript || transcript.length === 0) {
         console.log('All caption methods failed, trying audio download + transcription...');
-        transcript = await downloadAndTranscribeAudio(youtubeId);
+        await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
+        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
       }
 
       if (!transcript || transcript.length === 0) {
@@ -749,6 +752,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
             captions_missing: true,
             status: 'needs_attention',
             failed_step: 'captions',
+            processing_step: 'failed',
             error_message: 'No captions available and audio transcription failed. Please add the transcript manually by pasting text or uploading screenshots.'
           })
           .eq('id', videoId);
@@ -756,6 +760,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         console.log('Captions and audio transcription both failed, set to needs_attention');
         return;
       }
+
+      await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
 
       // Delete existing segments if retrying
       await supabase
@@ -798,7 +804,8 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           duration_seconds: duration,
           captions_missing: false,
           error_message: null,
-          failed_step: null
+          failed_step: null,
+          processing_step: 'generating_highlights',
         })
         .eq('id', videoId);
 
@@ -826,6 +833,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       }
     }
 
+    await supabase.from('videos').update({ processing_step: 'ready' }).eq('id', videoId);
     console.log('Video processed successfully:', videoId);
 
   } catch (error: unknown) {
@@ -1248,7 +1256,7 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 }
 
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
-async function downloadAndTranscribeAudio(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
+async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
   try {
     // Step 1: Get streaming URLs from Innertube API
     console.log('Audio fallback: Fetching streaming data for', youtubeId);
@@ -1321,6 +1329,7 @@ async function downloadAndTranscribeAudio(youtubeId: string): Promise<Array<{sta
     }
 
     // Step 3: Try ElevenLabs transcription
+    if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing' }).eq('id', videoId);
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
     if (ELEVENLABS_API_KEY) {
       try {
@@ -1369,6 +1378,7 @@ async function downloadAndTranscribeAudio(youtubeId: string): Promise<Array<{sta
 
     try {
       console.log('Audio fallback: Trying Gemini transcription...');
+      if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing_fallback' }).eq('id', videoId);
       const audioBytes = new Uint8Array(audioBuffer);
       let base64Audio = '';
       const chunkSize = 8192;
