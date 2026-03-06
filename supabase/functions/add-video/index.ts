@@ -852,7 +852,7 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
 
 interface CaptionResult {
   segments: Array<{start: number, end: number, text: string}>;
-  method: 'innertube' | 'html_scrape' | 'timedtext' | 'firecrawl' | 'none';
+  method: 'innertube' | 'html_scrape' | 'timedtext' | 'firecrawl' | 'audio_transcription' | 'none';
 }
 
 async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
@@ -909,6 +909,23 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     }
   } catch (e) {
     console.error('Firecrawl method failed:', e);
+  }
+
+  // Method 5: Download audio via Cobalt + transcribe with ElevenLabs (final fallback)
+  try {
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (ELEVENLABS_API_KEY) {
+      console.log('Method 5: Trying Cobalt audio download + ElevenLabs transcription for', youtubeId);
+      const audioSegments = await transcribeViaAudioDownload(youtubeId, ELEVENLABS_API_KEY);
+      if (audioSegments.length > 0) {
+        console.log(`Audio transcription: Got ${audioSegments.length} segments`);
+        return { segments: audioSegments, method: 'audio_transcription' };
+      }
+    } else {
+      console.log('ElevenLabs not configured, skipping Method 5');
+    }
+  } catch (e) {
+    console.error('Audio transcription method failed:', e);
   }
 
   console.log('All caption methods failed for', youtubeId);
@@ -1418,6 +1435,130 @@ async function correctTimestampsViaAudio(
   } catch (error) {
     console.error('Error in correctTimestampsViaAudio:', error);
   }
+}
+
+// Method 5: Download audio via Cobalt and transcribe with ElevenLabs Scribe v2
+async function transcribeViaAudioDownload(
+  youtubeId: string,
+  elevenLabsApiKey: string
+): Promise<Array<{start: number, end: number, text: string}>> {
+  // Step 1: Download audio via Cobalt API
+  console.log('Method 5: Downloading audio via Cobalt...');
+  
+  const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: `https://www.youtube.com/watch?v=${youtubeId}`,
+      downloadMode: 'audio',
+      audioFormat: 'mp3',
+      audioBitrate: '64',
+    }),
+  });
+
+  if (!cobaltResponse.ok) {
+    const errText = await cobaltResponse.text();
+    console.error('Cobalt API error:', cobaltResponse.status, errText);
+    return [];
+  }
+
+  const cobaltData = await cobaltResponse.json();
+  
+  if (!cobaltData.url || (cobaltData.status !== 'tunnel' && cobaltData.status !== 'redirect')) {
+    console.error('Cobalt did not return a download URL:', cobaltData.status);
+    return [];
+  }
+
+  console.log('Cobalt returned download URL, fetching audio...');
+
+  const audioResponse = await fetch(cobaltData.url);
+  if (!audioResponse.ok) {
+    console.error('Audio download failed:', audioResponse.status);
+    return [];
+  }
+
+  const audioBuffer = await audioResponse.arrayBuffer();
+  const audioSizeMB = audioBuffer.byteLength / (1024 * 1024);
+  console.log(`Audio downloaded: ${audioSizeMB.toFixed(1)}MB`);
+
+  if (audioBuffer.byteLength > 25 * 1024 * 1024) {
+    console.log('Audio too large for ElevenLabs (>25MB), skipping');
+    return [];
+  }
+
+  // Step 2: Send to ElevenLabs Scribe v2
+  console.log('Sending audio to ElevenLabs for transcription...');
+  
+  const audioBlob = new Blob([audioBuffer], { type: 'audio/mpeg' });
+  const formData = new FormData();
+  formData.append('file', audioBlob, 'audio.mp3');
+  formData.append('model_id', 'scribe_v2');
+  formData.append('tag_audio_events', 'false');
+  formData.append('diarize', 'false');
+  formData.append('timestamps_granularity', 'word');
+
+  const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+    method: 'POST',
+    headers: {
+      'xi-api-key': elevenLabsApiKey,
+    },
+    body: formData,
+  });
+
+  if (!sttResponse.ok) {
+    const errText = await sttResponse.text();
+    console.error('ElevenLabs STT error:', sttResponse.status, errText);
+    return [];
+  }
+
+  const sttData = await sttResponse.json();
+  const words = sttData.words || [];
+  
+  if (!words.length) {
+    console.log('ElevenLabs returned no words');
+    return [];
+  }
+
+  console.log(`ElevenLabs returned ${words.length} words with timestamps`);
+
+  // Step 3: Group words into ~15-second segments
+  const segments: Array<{start: number, end: number, text: string}> = [];
+  let currentSegment: { start: number; end: number; words: string[] } | null = null;
+
+  for (const word of words) {
+    const wordStart = word.start || 0;
+    const wordEnd = word.end || wordStart + 0.5;
+    const wordText = (word.text || '').trim();
+    if (!wordText) continue;
+
+    if (!currentSegment) {
+      currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+    } else if (wordEnd - currentSegment.start >= 15) {
+      segments.push({
+        start: Math.round(currentSegment.start * 10) / 10,
+        end: Math.round(currentSegment.end * 10) / 10,
+        text: currentSegment.words.join(' ').trim(),
+      });
+      currentSegment = { start: wordStart, end: wordEnd, words: [wordText] };
+    } else {
+      currentSegment.end = wordEnd;
+      currentSegment.words.push(wordText);
+    }
+  }
+
+  if (currentSegment && currentSegment.words.length > 0) {
+    segments.push({
+      start: Math.round(currentSegment.start * 10) / 10,
+      end: Math.round(currentSegment.end * 10) / 10,
+      text: currentSegment.words.join(' ').trim(),
+    });
+  }
+
+  console.log(`Audio transcription: Built ${segments.length} segments with accurate timestamps`);
+  return segments;
 }
 
 async function generateAISuggestions(videoId: string, transcript: Array<{start: number, end: number, text: string}>, supabase: any) {
