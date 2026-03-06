@@ -80,18 +80,153 @@ serve(async (req) => {
       body: apiFormData,
     });
 
+    let fullText = '';
+    let words: any[] = [];
+    let usedFallback = false;
+
     if (!sttResponse.ok) {
       const errText = await sttResponse.text();
       console.error('ElevenLabs STT error:', sttResponse.status, errText);
-      return new Response(
-        JSON.stringify({ error: `Transcription failed (${sttResponse.status}). The file may be corrupted or in an unsupported format.` }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+      console.log('Falling back to Lovable AI (Gemini) for transcription...');
 
-    const sttData = await sttResponse.json();
-    const fullText = sttData.text || '';
-    const words = sttData.words || [];
+      // Fallback: use Gemini via Lovable AI Gateway
+      const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+      if (!LOVABLE_API_KEY) {
+        return new Response(
+          JSON.stringify({ error: 'Both ElevenLabs and Lovable AI failed. No API keys available.' }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      // Convert audio to base64 for Gemini
+      const audioBytes = await audioFile.arrayBuffer();
+      const base64Audio = btoa(String.fromCharCode(...new Uint8Array(audioBytes)));
+
+      // Determine MIME type
+      const mimeType = audioFile.type || 'audio/webm';
+
+      const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an audio transcription assistant. Transcribe the audio accurately. Return ONLY valid JSON with this exact format:
+{
+  "text": "full transcription text here",
+  "segments": [
+    {"start": 0, "end": 15, "text": "segment text here"},
+    {"start": 15, "end": 30, "text": "next segment text"}
+  ]
+}
+Rules:
+- Transcribe all spoken words accurately
+- Split into segments of roughly 15-20 seconds each
+- Estimate timestamps based on speech pacing (~2.5 words per second)
+- Do NOT include any markdown, code fences, or explanation - ONLY the JSON object`
+            },
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'input_audio',
+                  input_audio: {
+                    data: base64Audio,
+                    format: mimeType.includes('wav') ? 'wav' : mimeType.includes('mp3') ? 'mp3' : 'webm',
+                  }
+                },
+                {
+                  type: 'text',
+                  text: 'Transcribe this audio recording. Return only the JSON object with text and segments.'
+                }
+              ]
+            }
+          ],
+        }),
+      });
+
+      if (!geminiResponse.ok) {
+        const geminiErr = await geminiResponse.text();
+        console.error('Gemini transcription error:', geminiResponse.status, geminiErr);
+        return new Response(
+          JSON.stringify({ error: `Both ElevenLabs (${sttResponse.status}) and Lovable AI (${geminiResponse.status}) transcription failed.` }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      const geminiData = await geminiResponse.json();
+      const content = geminiData.choices?.[0]?.message?.content || '';
+      console.log('Gemini raw response length:', content.length);
+
+      // Parse JSON from response (strip any markdown fences)
+      const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+      try {
+        const parsed = JSON.parse(jsonStr);
+        fullText = parsed.text || '';
+        usedFallback = true;
+
+        // If Gemini returned segments, use them directly
+        if (parsed.segments && Array.isArray(parsed.segments) && parsed.segments.length > 0) {
+          // Save segments directly and skip the word-based segmentation below
+          const segments = parsed.segments.map((s: any) => ({
+            start: Number(s.start) || 0,
+            end: Number(s.end) || 0,
+            text: String(s.text || '').trim(),
+          })).filter((s: any) => s.text.length > 0);
+
+          if (videoId) {
+            const { data: video } = await supabase
+              .from('videos')
+              .select('id, user_id')
+              .eq('id', videoId)
+              .eq('user_id', user.id)
+              .single();
+
+            if (video) {
+              await supabase.from('transcript_segments').delete().eq('video_id', videoId);
+              const segmentRows = segments.map((seg: any) => ({
+                video_id: videoId,
+                start_seconds: seg.start,
+                end_seconds: seg.end,
+                text: seg.text,
+              }));
+              await supabase.from('transcript_segments').insert(segmentRows);
+
+              const duration = segments.length > 0 ? Math.ceil(segments[segments.length - 1].end) : 0;
+              await supabase.from('videos').update({
+                status: 'ready',
+                source_type: 'upload',
+                duration_seconds: duration,
+                captions_missing: false,
+                error_message: null,
+                failed_step: null,
+              }).eq('id', videoId);
+
+              console.log(`[Gemini fallback] Saved ${segments.length} segments to video ${videoId}`);
+            }
+          }
+
+          return new Response(
+            JSON.stringify({ text: fullText, segments, word_count: fullText.split(/\s+/).length, fallback: 'gemini' }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } catch (parseErr) {
+        console.error('Failed to parse Gemini response as JSON:', parseErr);
+        // Try to use the raw content as plain text
+        fullText = content;
+        usedFallback = true;
+      }
+    } else {
+      const sttData = await sttResponse.json();
+      fullText = sttData.text || '';
+      words = sttData.words || [];
+    }
 
     if (!fullText.trim()) {
       return new Response(
@@ -234,7 +369,8 @@ serve(async (req) => {
       JSON.stringify({
         text: fullText,
         segments,
-        word_count: words.length,
+        word_count: usedFallback ? fullText.split(/\s+/).length : words.length,
+        ...(usedFallback ? { fallback: 'gemini' } : {}),
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
