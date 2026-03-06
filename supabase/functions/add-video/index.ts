@@ -894,38 +894,38 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<CaptionResult> {
     console.error('Timedtext method failed:', e);
   }
 
-  // Method 4: Firecrawl scrape (extracts page content as transcript substitute)
-  try {
-    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-    if (FIRECRAWL_API_KEY) {
-      console.log('Method 4: Trying Firecrawl scrape for', youtubeId);
-      const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
-      if (firecrawlResult.length > 0) {
-        console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
-        return { segments: firecrawlResult, method: 'firecrawl' };
-      }
-    } else {
-      console.log('Firecrawl not configured, skipping Method 4');
-    }
-  } catch (e) {
-    console.error('Firecrawl method failed:', e);
-  }
-
-  // Method 5: Download audio via Cobalt + transcribe with ElevenLabs (final fallback)
+  // Method 4: Download audio + transcribe with ElevenLabs (accurate spoken words)
   try {
     const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
     if (ELEVENLABS_API_KEY) {
-      console.log('Method 5: Trying Cobalt audio download + ElevenLabs transcription for', youtubeId);
+      console.log('Method 4: Trying audio download + ElevenLabs transcription for', youtubeId);
       const audioSegments = await transcribeViaAudioDownload(youtubeId, ELEVENLABS_API_KEY);
       if (audioSegments.length > 0) {
         console.log(`Audio transcription: Got ${audioSegments.length} segments`);
         return { segments: audioSegments, method: 'audio_transcription' };
       }
     } else {
-      console.log('ElevenLabs not configured, skipping Method 5');
+      console.log('ElevenLabs not configured, skipping Method 4');
     }
   } catch (e) {
     console.error('Audio transcription method failed:', e);
+  }
+
+  // Method 5: Firecrawl scrape (last resort - extracts page content as transcript substitute)
+  try {
+    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+    if (FIRECRAWL_API_KEY) {
+      console.log('Method 5: Trying Firecrawl scrape for', youtubeId);
+      const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
+      if (firecrawlResult.length > 0) {
+        console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
+        return { segments: firecrawlResult, method: 'firecrawl' };
+      }
+    } else {
+      console.log('Firecrawl not configured, skipping Method 5');
+    }
+  } catch (e) {
+    console.error('Firecrawl method failed:', e);
   }
 
   console.log('All caption methods failed for', youtubeId);
@@ -951,7 +951,7 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
       body: JSON.stringify({
         url: videoUrl,
         formats: ['markdown'],
-        onlyMainContent: false,
+        onlyMainContent: true,
         waitFor: 5000,
         timeout: 60000,
       }),
@@ -1006,15 +1006,21 @@ async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Prom
           {
             role: 'system',
             content: `You are a transcript extractor. Given scraped YouTube page content, extract ONLY the spoken words/transcript from the video. 
-Remove ALL of the following:
-- Video title and description
-- Channel name, subscriber counts, view counts
-- Links, URLs, hashtags
-- Comments section
-- Related video suggestions
-- Upload dates, like counts
-- Any metadata or navigation elements
-- Copyright notices
+
+CRITICAL RULES:
+- Extract ONLY words that were SPOKEN in the video
+- Look for the transcript section (timestamped lines like "0:00 text", "1:23 text") - this is the most reliable source
+- If timestamps are present, preserve them in each paragraph
+- Remove ALL of the following:
+  - Video title, description, channel info
+  - Subscriber counts, view counts, like counts
+  - Links, URLs, hashtags
+  - Comments section content
+  - Related/recommended video titles and descriptions  
+  - Upload dates, metadata
+  - Navigation elements, buttons
+  - Copyright notices
+  - Any text from OTHER videos (recommendations, playlist items)
 
 Return ONLY the actual spoken words as a clean transcript. Split into natural paragraphs (one paragraph per topic shift or every ~30 seconds of speech). 
 Return as a JSON object with a "paragraphs" array of strings.
@@ -1022,7 +1028,7 @@ If you cannot identify any spoken transcript content, return {"paragraphs": []}.
           },
           {
             role: 'user',
-            content: `Extract the spoken transcript from this YouTube page content:\n\n${markdown.slice(0, 15000)}`
+            content: `Extract the spoken transcript from this YouTube page content. IMPORTANT: Only extract words that were actually SPOKEN in this specific video. Do NOT include text from video descriptions, comments, or recommended videos.\n\n${markdown.slice(0, 15000)}`
           }
         ],
         response_format: { type: 'json_object' },
@@ -1619,68 +1625,118 @@ async function transcribeViaAudioDownload(
 }
 
 async function downloadAudioViaInnertube(youtubeId: string): Promise<ArrayBuffer | null> {
-  const response = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  // Try multiple clients - iOS and TV_EMBEDDED are most reliable for audio streams
+  const clients = [
+    {
+      clientName: 'IOS',
+      clientVersion: '19.09.3',
+      apiKey: 'AIzaSyB-63vPrdThhKuerbB2N_l7Kwwcxj6yUAc',
+      userAgent: 'com.google.ios.youtube/19.09.3 (iPhone14,3; U; CPU iOS 15_6 like Mac OS X)',
+      extraContext: { deviceMake: 'Apple', deviceModel: 'iPhone14,3', osName: 'iPhone', osVersion: '15.6.0.19G71' },
     },
-    body: JSON.stringify({
-      context: {
-        client: {
-          hl: 'en',
-          gl: 'US',
-          clientName: 'WEB',
-          clientVersion: '2.20240101.00.00',
+    {
+      clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+      clientVersion: '2.0',
+      apiKey: '',
+      userAgent: 'Mozilla/5.0 (SMART-TV; LINUX; Tizen 6.5)',
+      extraContext: {},
+    },
+    {
+      clientName: 'ANDROID_MUSIC',
+      clientVersion: '6.42.52',
+      apiKey: 'AIzaSyAOghZGza2MQSZkY_zfZ370N-PUdXEo8AI',
+      userAgent: 'com.google.android.apps.youtube.music/6.42.52 (Linux; U; Android 11) gzip',
+      extraContext: { androidSdkVersion: 30, platform: 'MOBILE' },
+    },
+    {
+      clientName: 'WEB',
+      clientVersion: '2.20240101.00.00',
+      apiKey: '',
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      extraContext: {},
+    },
+  ];
+
+  for (const client of clients) {
+    try {
+      const url = client.apiKey 
+        ? `https://www.youtube.com/youtubei/v1/player?prettyPrint=false&key=${client.apiKey}`
+        : 'https://www.youtube.com/youtubei/v1/player?prettyPrint=false';
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': client.userAgent,
         },
-      },
-      videoId: youtubeId,
-    }),
-  });
+        body: JSON.stringify({
+          context: {
+            client: {
+              hl: 'en',
+              gl: 'US',
+              clientName: client.clientName,
+              clientVersion: client.clientVersion,
+              ...client.extraContext,
+            },
+            ...(client.clientName === 'TVHTML5_SIMPLY_EMBEDDED_PLAYER' ? {
+              thirdParty: { embedUrl: 'https://www.youtube.com/' }
+            } : {}),
+          },
+          videoId: youtubeId,
+        }),
+      });
 
-  if (!response.ok) {
-    console.error('Innertube player API returned:', response.status);
-    return null;
+      if (!response.ok) {
+        console.log(`Innertube ${client.clientName} returned:`, response.status);
+        continue;
+      }
+
+      const data = await response.json();
+      const adaptiveFormats = data?.streamingData?.adaptiveFormats || [];
+
+      // Also check for signatureCipher-based formats (no direct URL)
+      const audioFormats = adaptiveFormats
+        .filter((f: any) => typeof f?.mimeType === 'string' && f.mimeType.includes('audio/') && typeof f?.url === 'string')
+        .map((f: any) => ({
+          url: f.url as string,
+          bitrate: Number(f.bitrate || 0),
+          contentLength: Number(f.contentLength || 0),
+          mimeType: f.mimeType as string,
+        }))
+        .sort((a: any, b: any) => {
+          const aSize = a.contentLength || Number.MAX_SAFE_INTEGER;
+          const bSize = b.contentLength || Number.MAX_SAFE_INTEGER;
+          if (aSize !== bSize) return aSize - bSize;
+          return a.bitrate - b.bitrate;
+        });
+
+      if (audioFormats.length === 0) {
+        console.log(`Innertube ${client.clientName}: No direct audio URLs available`);
+        continue;
+      }
+
+      const selected = audioFormats.find((f: any) => !f.contentLength || f.contentLength <= 25 * 1024 * 1024) || audioFormats[0];
+      console.log(`Innertube ${client.clientName}: Downloading audio format`, selected.mimeType, 'bitrate', selected.bitrate);
+
+      const audioResponse = await fetch(selected.url, {
+        headers: {
+          'User-Agent': client.userAgent,
+        },
+      });
+
+      if (!audioResponse.ok) {
+        console.error(`Innertube ${client.clientName} audio download failed:`, audioResponse.status);
+        continue;
+      }
+
+      return await audioResponse.arrayBuffer();
+    } catch (e) {
+      console.error(`Innertube ${client.clientName} failed:`, e);
+      continue;
+    }
   }
 
-  const data = await response.json();
-  const adaptiveFormats = data?.streamingData?.adaptiveFormats || [];
-
-  const audioFormats = adaptiveFormats
-    .filter((f: any) => typeof f?.mimeType === 'string' && f.mimeType.includes('audio/') && typeof f?.url === 'string')
-    .map((f: any) => ({
-      url: f.url as string,
-      bitrate: Number(f.bitrate || 0),
-      contentLength: Number(f.contentLength || 0),
-      mimeType: f.mimeType as string,
-    }))
-    .sort((a: any, b: any) => {
-      const aSize = a.contentLength || Number.MAX_SAFE_INTEGER;
-      const bSize = b.contentLength || Number.MAX_SAFE_INTEGER;
-      if (aSize !== bSize) return aSize - bSize;
-      return a.bitrate - b.bitrate;
-    });
-
-  if (audioFormats.length === 0) {
-    console.log('Innertube: No direct audio URLs available');
-    return null;
-  }
-
-  const selected = audioFormats.find((f: any) => !f.contentLength || f.contentLength <= 25 * 1024 * 1024) || audioFormats[0];
-  console.log('Innertube: Downloading audio format', selected.mimeType, 'bitrate', selected.bitrate);
-
-  const audioResponse = await fetch(selected.url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-    },
-  });
-
-  if (!audioResponse.ok) {
-    console.error('Innertube audio download failed:', audioResponse.status);
-    return null;
-  }
-
-  return await audioResponse.arrayBuffer();
+  return null;
 }
 
 async function downloadAudioViaInvidious(youtubeId: string): Promise<ArrayBuffer | null> {
