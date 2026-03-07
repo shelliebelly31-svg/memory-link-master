@@ -234,13 +234,13 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
           <div className="space-y-2">
             <Label htmlFor="url" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4 text-muted-foreground" />
-              Video Link
-              <span className="text-xs text-muted-foreground">(optional)</span>
+              Link
+              <span className="text-xs text-muted-foreground">(any video, podcast, or web link)</span>
             </Label>
             <div className="relative">
               <Input
                 id="url"
-                placeholder="https://youtube.com/watch?v=..."
+                placeholder="https://youtube.com/watch?v=... or any web/video link"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={isLoading}
