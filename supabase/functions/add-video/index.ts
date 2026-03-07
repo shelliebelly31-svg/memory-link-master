@@ -1374,51 +1374,112 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
 async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
   try {
-    // Step 1: Get streaming URLs from Innertube API
-    console.log('Audio fallback: Fetching streaming data for', youtubeId);
-    const playerResponse = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    // Step 1: Try multiple Innertube clients to find audio streams
+    // WEB client often blocks direct URLs; ANDROID/IOS clients expose them more reliably
+    const clientConfigs = [
+      {
+        name: 'WEB',
+        clientName: 'WEB',
+        clientVersion: '2.20240101.00.00',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
-      body: JSON.stringify({
-        context: {
-          client: {
-            hl: 'en',
-            gl: 'US',
-            clientName: 'WEB',
-            clientVersion: '2.20240101.00.00',
+      {
+        name: 'ANDROID',
+        clientName: 'ANDROID',
+        clientVersion: '19.09.37',
+        userAgent: 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip',
+        androidSdkVersion: 34,
+      },
+      {
+        name: 'IOS',
+        clientName: 'IOS',
+        clientVersion: '19.09.3',
+        userAgent: 'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_0 like Mac OS X)',
+      },
+    ];
+
+    let audioFormat: any = null;
+    let audioUrl: string | null = null;
+    let usedClient = '';
+
+    for (const client of clientConfigs) {
+      console.log(`Audio fallback: Trying ${client.name} client for`, youtubeId);
+      try {
+        const body: any = {
+          context: {
+            client: {
+              hl: 'en',
+              gl: 'US',
+              clientName: client.clientName,
+              clientVersion: client.clientVersion,
+            },
           },
-        },
-        videoId: youtubeId,
-      }),
-    });
+          videoId: youtubeId,
+        };
 
-    if (!playerResponse.ok) {
-      console.error('Audio fallback: Innertube returned', playerResponse.status);
-      return [];
+        // Android client needs androidSdkVersion
+        if ((client as any).androidSdkVersion) {
+          body.context.client.androidSdkVersion = (client as any).androidSdkVersion;
+        }
+
+        const playerResponse = await fetch('https://www.youtube.com/youtubei/v1/player?prettyPrint=false', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': client.userAgent,
+          },
+          body: JSON.stringify(body),
+        });
+
+        if (!playerResponse.ok) {
+          console.log(`Audio fallback: ${client.name} returned ${playerResponse.status}`);
+          continue;
+        }
+
+        const playerData = await playerResponse.json();
+        
+        // Check playability status
+        const playability = playerData?.playabilityStatus?.status;
+        if (playability && playability !== 'OK') {
+          console.log(`Audio fallback: ${client.name} playability: ${playability}`);
+          continue;
+        }
+
+        const adaptiveFormats = playerData?.streamingData?.adaptiveFormats || [];
+        const formats = playerData?.streamingData?.formats || [];
+        const allFormats = [...adaptiveFormats, ...formats];
+        
+        // Find audio-only streams, prefer mp4a (AAC) for best compatibility
+        const audioFormats = allFormats
+          .filter((f: any) => f.mimeType?.startsWith('audio/'))
+          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+
+        if (audioFormats.length === 0) {
+          console.log(`Audio fallback: ${client.name} — no audio streams found`);
+          continue;
+        }
+
+        const candidate = audioFormats.find((f: any) => f.mimeType?.includes('mp4a'))
+          || audioFormats[0];
+        
+        const candidateUrl = candidate.url;
+        if (!candidateUrl) {
+          console.log(`Audio fallback: ${client.name} — audio URL not directly available (signature required)`);
+          continue;
+        }
+
+        audioFormat = candidate;
+        audioUrl = candidateUrl;
+        usedClient = client.name;
+        console.log(`Audio fallback: ${client.name} — found audio stream! (${candidate.mimeType}, bitrate: ${candidate.bitrate})`);
+        break;
+      } catch (e) {
+        console.error(`Audio fallback: ${client.name} error:`, e);
+      }
     }
 
-    const playerData = await playerResponse.json();
-    const adaptiveFormats = playerData?.streamingData?.adaptiveFormats || [];
-    
-    // Find audio-only streams, prefer mp4a (AAC) for best compatibility
-    const audioFormats = adaptiveFormats
-      .filter((f: any) => f.mimeType?.startsWith('audio/'))
-      .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-
-    if (audioFormats.length === 0) {
-      console.log('Audio fallback: No audio streams found in streaming data');
-      return [];
-    }
-
-    const audioFormat = audioFormats.find((f: any) => f.mimeType?.includes('mp4a'))
-      || audioFormats[0];
-    
-    const audioUrl = audioFormat.url;
-    if (!audioUrl) {
-      console.log('Audio fallback: Audio stream URL not directly available (may require signature deciphering)');
+    if (!audioFormat || !audioUrl) {
+      console.log('Audio fallback: No audio streams found from any client');
       return [];
     }
 
