@@ -1212,6 +1212,13 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
 
     // Step 2: Fetch captions/transcript with quality check
     if (startIndex <= 1) {
+      // Fetch title if we don't have it (retry case)
+      if (!videoTitle) {
+        const { data: vd } = await supabase.from('videos').select('title, duration_seconds').eq('id', videoId).single();
+        videoTitle = vd?.title;
+        if (!videoDurationSeconds) videoDurationSeconds = vd?.duration_seconds;
+      }
+
       console.log('Step 2: Fetching captions for video:', videoId);
 
       await supabase.from('videos').update({ processing_step: 'extracting_captions' }).eq('id', videoId);
