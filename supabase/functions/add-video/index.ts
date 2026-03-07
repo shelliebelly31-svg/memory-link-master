@@ -1484,10 +1484,15 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     }
 
     // Step 2: Download the audio (limit to ~25MB / first few minutes)
-    console.log(`Audio fallback: Downloading audio stream (${audioFormat.mimeType}, bitrate: ${audioFormat.bitrate})`);
+    console.log(`Audio fallback: Downloading audio stream via ${usedClient} (${audioFormat.mimeType}, bitrate: ${audioFormat.bitrate})`);
+    const downloadUserAgent = usedClient === 'ANDROID'
+      ? 'com.google.android.youtube/19.09.37 (Linux; U; Android 14) gzip'
+      : usedClient === 'IOS'
+        ? 'com.google.ios.youtube/19.09.3 (iPhone; CPU iPhone OS 17_0 like Mac OS X)'
+        : 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
     const audioResponse = await fetch(audioUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent': downloadUserAgent,
         'Range': 'bytes=0-25165824', // First 24MB
       },
     });
