@@ -1280,7 +1280,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       if (!transcript || transcript.length === 0) {
         console.log('All caption methods failed, trying audio download + transcription...');
         await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
-        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
         if (transcript && transcript.length > 0) {
           transcriptSource = 'audio_transcription';
         }
