@@ -724,10 +724,9 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
     return { isGood: false, reason: `${largeGaps} large timestamp gaps — missing spoken continuity` };
   }
 
-  // Check 5: All timestamps are 0 or synthetic (30s intervals = Firecrawl page scrape)
+  // Check 5: All timestamps are 0 or synthetic (30s intervals)
   const allSyntheticTimestamps = segments.every((s, i) => s.start === i * 30);
   if (allSyntheticTimestamps && segments.length > 2) {
-    // This is likely Firecrawl-generated page text with fake 30s intervals
     // Check if content looks like page text vs speech
     const fullText = segments.map(s => s.text).join(' ').toLowerCase();
     const pageIndicators = ['subscribe', 'click here', 'copyright', 'privacy policy', 'terms of service', 'all rights reserved', 'sign in', 'sign up', 'cookies'];
