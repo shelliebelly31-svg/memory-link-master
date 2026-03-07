@@ -1821,7 +1821,7 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 }
 
 // Method 5b: Use Gemini to transcribe directly from YouTube URL (no audio extraction needed)
-async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
+async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string, supabase?: any, videoTitle?: string): Promise<Array<{start: number, end: number, text: string}>> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
     console.log('Gemini YouTube fallback: No LOVABLE_API_KEY');
