@@ -836,8 +836,18 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
               }
             }
           } else {
-            console.log('Audio transcription failed or empty — keeping weak captions as fallback');
-            transcriptSource = 'captions';
+            console.log('Audio transcription failed or empty — weak captions are not usable, setting needs_attention');
+            await supabase
+              .from('videos')
+              .update({
+                captions_missing: true,
+                status: 'needs_attention',
+                failed_step: 'captions',
+                processing_step: 'failed',
+                error_message: 'Captions were low quality (page text/comments, not spoken dialogue) and audio transcription failed. Please add the transcript manually.',
+              })
+              .eq('id', videoId);
+            return;
           }
         } else {
           console.log('Caption quality check PASSED — using fetched captions');
