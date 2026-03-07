@@ -38,6 +38,26 @@ function getCanonicalUrl(videoId: string): string {
   return `https://www.youtube.com/watch?v=${videoId}`;
 }
 
+// Check if URL is a direct media file
+function isDirectMediaUrl(url: string): boolean {
+  const mediaExtensions = /\.(mp4|webm|mov|avi|mkv|m4v|mp3|wav|m4a|ogg|flac|aac|wma)(\?|$)/i;
+  return mediaExtensions.test(url);
+}
+
+// Check if URL is YouTube
+function isYouTubeUrl(url: string): boolean {
+  return /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/.test(url);
+}
+
+// Normalize any URL
+function normalizeUrl(url: string): string {
+  let normalized = url.trim();
+  if (!normalized.startsWith('http://') && !normalized.startsWith('https://')) {
+    normalized = `https://${normalized}`;
+  }
+  return normalized;
+}
+
 // Parse timestamps from transcript text
 // Supports formats: 00:00, 0:00, 00:00:00, [00:00], (00:00)
 function parseTranscriptText(text: string): Array<{start: number, end: number, text: string}> {
