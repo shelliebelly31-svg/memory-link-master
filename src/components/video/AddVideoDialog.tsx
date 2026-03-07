@@ -398,8 +398,8 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
 
           {/* Helper text */}
           <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            💡 Provide at least one: a YouTube link, audio/video file, pasted transcript, or screenshots. 
-            Audio files are transcribed automatically using ElevenLabs.
+            💡 Provide at least one: any web/video/podcast link, audio/video file, pasted transcript, or screenshots. 
+            Links are automatically inspected and transcribed using AI.
           </p>
 
           <div className="flex gap-3 pt-2">
