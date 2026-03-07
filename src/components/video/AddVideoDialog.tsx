@@ -114,11 +114,14 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     }
 
     if (hasUrl) {
-      const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
-      if (!youtubeRegex.test(url)) {
+      // Basic URL validation - accept any URL
+      try {
+        const testUrl = url.startsWith('http') ? url : `https://${url}`;
+        new URL(testUrl);
+      } catch {
         toast({
           title: 'Invalid URL',
-          description: 'Please enter a valid YouTube URL',
+          description: 'Please enter a valid URL',
           variant: 'destructive',
         });
         return;
