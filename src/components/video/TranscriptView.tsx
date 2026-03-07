@@ -63,16 +63,12 @@ interface TranscriptViewProps {
   onPlayVideo?: () => void;
   onResegment?: () => Promise<void>;
   isResegmenting?: boolean;
-  onRefetchCaptions?: () => Promise<void>;
-  isRefetchingCaptions?: boolean;
   onFixTimestampsViaAudio?: (file: File) => Promise<void>;
   isFixingTimestamps?: boolean;
   onRecordAndTranscribe?: (blob: Blob) => Promise<void>;
   isRecording?: boolean;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
-  onReprocessTranscript?: () => Promise<void>;
-  isReprocessing?: boolean;
 }
 
 interface SelectionState {
@@ -104,16 +100,12 @@ export function TranscriptView({
   onPlayVideo,
   onResegment,
   isResegmenting,
-  onRefetchCaptions,
-  isRefetchingCaptions,
   onFixTimestampsViaAudio,
   isFixingTimestamps,
   onRecordAndTranscribe,
   isRecording,
   onStartRecording,
   onStopRecording,
-  onReprocessTranscript,
-  isReprocessing,
 }: TranscriptViewProps) {
   const [highlightMode, setHighlightMode] = useState(true);
   const [selection, setSelection] = useState<SelectionState | null>(null);

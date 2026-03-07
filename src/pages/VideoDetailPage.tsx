@@ -51,10 +51,10 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [isResegmenting, setIsResegmenting] = useState(false);
-  const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
+  
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
-  const [isReprocessing, setIsReprocessing] = useState(false);
+  
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   
@@ -148,30 +148,6 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     }
   }, [id, queryClient, toast]);
 
-  const handleRefetchCaptions = useCallback(async () => {
-    if (!id) return;
-    setIsRefetchingCaptions(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('add-video', {
-        body: { refetch_captions_video_id: id },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast({
-        title: 'YouTube captions fetched',
-        description: `Loaded ${data.segment_count} segments with accurate timestamps`,
-      });
-      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
-    } catch (err: any) {
-      toast({
-        title: 'Could not fetch YouTube captions',
-        description: err.message || 'Captions may not be available for this video',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsRefetchingCaptions(false);
-    }
-  }, [id, queryClient, toast]);
 
   const handleFixTimestampsViaAudio = useCallback(async (file: File) => {
     if (!id) return;
@@ -266,31 +242,6 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     playerControlsRef.current?.pause();
   }, []);
 
-  const handleReprocessTranscript = useCallback(async () => {
-    if (!id) return;
-    setIsReprocessing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('add-video', {
-        body: { retry_video_id: id, retry_from_step: 'captions' },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast({
-        title: 'Re-processing transcript',
-        description: 'Running quality check with audio transcription fallback...',
-      });
-      queryClient.invalidateQueries({ queryKey: ['video', id] });
-      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
-    } catch (err: any) {
-      toast({
-        title: 'Re-process failed',
-        description: err.message || 'Something went wrong',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsReprocessing(false);
-    }
-  }, [id, queryClient, toast]);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
