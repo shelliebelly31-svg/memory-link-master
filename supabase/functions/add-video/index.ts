@@ -309,40 +309,74 @@ serve(async (req) => {
     let videoId: string | null = null;
     let canonicalUrl = '';
     let sourceType = 'manual';
+    let isYouTube = false;
+    let isDirectMedia = false;
+    let genericUrl = '';
 
     if (hasLink) {
-      try {
-        videoId = extractVideoId(youtube_url);
-      } catch (e) {
-        console.error('URL parsing error:', e);
-      }
+      const normalizedUrl = normalizeUrl(youtube_url);
+      
+      // Check if it's a YouTube URL
+      if (isYouTubeUrl(normalizedUrl)) {
+        try {
+          videoId = extractVideoId(normalizedUrl);
+        } catch (e) {
+          console.error('URL parsing error:', e);
+        }
 
-      if (!videoId) {
-        return new Response(
-          JSON.stringify({ error: 'Invalid YouTube URL. Please use a link like youtube.com/watch?v=... or youtu.be/...' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
+        if (!videoId) {
+          return new Response(
+            JSON.stringify({ error: 'Could not parse YouTube URL. Please check the link.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
 
-      canonicalUrl = getCanonicalUrl(videoId);
-      sourceType = 'link';
+        canonicalUrl = getCanonicalUrl(videoId);
+        sourceType = 'link';
+        isYouTube = true;
 
-      // Check if video already exists for this user
-      const { data: existingVideo } = await supabase
-        .from('videos')
-        .select('id, status')
-        .eq('user_id', user.id)
-        .eq('youtube_id', videoId)
-        .maybeSingle();
+        // Check if video already exists for this user
+        const { data: existingVideo } = await supabase
+          .from('videos')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('youtube_id', videoId)
+          .maybeSingle();
 
-      if (existingVideo) {
-        return new Response(
-          JSON.stringify({ 
-            error: 'You already have this video in your library',
-            existing_video_id: existingVideo.id
-          }),
-          { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        if (existingVideo) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'You already have this video in your library',
+              existing_video_id: existingVideo.id
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      } else {
+        // Generic URL (web page, direct media, podcast, etc.)
+        genericUrl = normalizedUrl;
+        isDirectMedia = isDirectMediaUrl(normalizedUrl);
+        sourceType = isDirectMedia ? 'media_link' : 'web_link';
+        canonicalUrl = normalizedUrl;
+        videoId = `generic-${Date.now()}`;
+        
+        // Check for duplicate URLs
+        const { data: existingVideo } = await supabase
+          .from('videos')
+          .select('id, status')
+          .eq('user_id', user.id)
+          .eq('youtube_url', normalizedUrl)
+          .maybeSingle();
+
+        if (existingVideo) {
+          return new Response(
+            JSON.stringify({ 
+              error: 'You already have this link in your library',
+              existing_video_id: existingVideo.id
+            }),
+            { status: 409, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
       }
     } else if (hasScreenshots) {
       sourceType = 'upload';
