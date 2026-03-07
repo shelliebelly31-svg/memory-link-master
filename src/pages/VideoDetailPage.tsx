@@ -76,6 +76,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const updateScheduleMutation = useUpdateRememberSchedule();
   const updateTaskMutation = useUpdateTaskStatus();
   const convertHighlightMutation = useConvertHighlight();
+  const retryVideoMutation = useRetryVideo();
   const queryClient = useQueryClient();
 
   // Callback to refresh highlights after AI suggestions update
