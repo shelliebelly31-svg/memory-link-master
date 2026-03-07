@@ -1109,6 +1109,60 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
   return { isGood: true, reason: 'Passed quality checks' };
 }
 
+// Check if transcript content is topically relevant to the video title using AI
+async function checkTopicalRelevance(
+  title: string,
+  segments: Array<{start: number, end: number, text: string}>
+): Promise<{ relevant: boolean; reason: string }> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('No LOVABLE_API_KEY — skipping topical relevance check');
+    return { relevant: true, reason: 'Skipped — no API key' };
+  }
+
+  try {
+    // Use first ~500 words of transcript for the check
+    const sampleText = segments.map(s => s.text).join(' ').slice(0, 2000);
+
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash-lite',
+        messages: [
+          {
+            role: 'system',
+            content: `You determine whether a transcript excerpt matches a given video title. Return ONLY valid JSON: {"relevant": true/false, "reason": "brief explanation"}. A transcript is RELEVANT if it discusses the same topic, person, or theme as the title — even loosely. It is NOT relevant if it's clearly about a completely different subject (e.g., title about psychology but transcript about shopping). Be lenient — partial overlap counts as relevant.`
+          },
+          {
+            role: 'user',
+            content: `Video title: "${title}"\n\nTranscript excerpt:\n${sampleText}`
+          }
+        ],
+      }),
+    });
+
+    if (!response.ok) {
+      console.error('Topical relevance check: API error', response.status);
+      return { relevant: true, reason: 'API error — defaulting to relevant' };
+    }
+
+    const data = await response.json();
+    const content = data.choices?.[0]?.message?.content || '';
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    const parsed = JSON.parse(jsonStr);
+
+    console.log(`Topical relevance check: relevant=${parsed.relevant}, reason=${parsed.reason}`);
+    return { relevant: !!parsed.relevant, reason: String(parsed.reason || '') };
+  } catch (e) {
+    console.error('Topical relevance check error:', e);
+    return { relevant: true, reason: 'Error during check — defaulting to relevant' };
+  }
+}
+
 // Priority C: Process from YouTube link
 async function processVideoFromLink(videoId: string, youtubeId: string, supabase: any, startFromStep?: string) {
   const steps = ['metadata', 'captions', 'ai_suggestions'];
@@ -1243,6 +1297,28 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       const { data: currentState } = await supabase.from('videos').select('processing_step').eq('id', videoId).single();
       if (currentState?.processing_step === 'transcribing_fallback' && transcriptSource === 'audio_transcription') {
         transcriptSource = 'gemini_fallback';
+      }
+
+      // Topical relevance check — especially important for AI-generated transcripts
+      const { data: videoForTitle } = await supabase.from('videos').select('title').eq('id', videoId).single();
+      const videoTitle = videoForTitle?.title || '';
+      
+      if (videoTitle && videoTitle !== 'Processing...' && transcript && transcript.length > 0) {
+        const relevance = await checkTopicalRelevance(videoTitle, transcript);
+        if (!relevance.relevant) {
+          console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
+          await supabase
+            .from('videos')
+            .update({
+              status: 'needs_attention',
+              failed_step: 'captions',
+              processing_step: 'failed',
+              error_message: `Transcript content does not match the video topic ("${videoTitle}"). The AI may have generated incorrect content. Please record the audio manually.`,
+              captions_missing: true,
+            })
+            .eq('id', videoId);
+          return;
+        }
       }
 
       await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
