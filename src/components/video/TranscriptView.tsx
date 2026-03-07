@@ -522,34 +522,6 @@ export function TranscriptView({
           </Button>
         )}
 
-        {/* Fix timestamps via audio upload */}
-        {onFixTimestampsViaAudio && (
-          <>
-            <input
-              ref={audioInputRef}
-              type="file"
-              accept="audio/*,video/*,.mp3,.mp4,.wav,.m4a,.webm,.ogg"
-              className="hidden"
-              onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  onFixTimestampsViaAudio(file);
-                  e.target.value = '';
-                }
-              }}
-            />
-            <Button
-              variant="outline"
-              size="sm"
-              className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
-              onClick={() => audioInputRef.current?.click()}
-              disabled={isFixingTimestamps}
-            >
-              <Upload className={cn("h-3 w-3", isFixingTimestamps && "animate-spin")} />
-              {isFixingTimestamps ? 'Transcribing audio...' : 'Upload audio file to transcribe'}
-            </Button>
-          </>
-        )}
 
 
         {/* Quick Add Buttons - Always visible, changes behavior based on selection */}
