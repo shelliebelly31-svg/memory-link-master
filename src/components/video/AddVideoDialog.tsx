@@ -114,11 +114,14 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
     }
 
     if (hasUrl) {
-      const youtubeRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/;
-      if (!youtubeRegex.test(url)) {
+      // Basic URL validation - accept any URL
+      try {
+        const testUrl = url.startsWith('http') ? url : `https://${url}`;
+        new URL(testUrl);
+      } catch {
         toast({
           title: 'Invalid URL',
-          description: 'Please enter a valid YouTube URL',
+          description: 'Please enter a valid URL',
           variant: 'destructive',
         });
         return;
@@ -231,13 +234,13 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
           <div className="space-y-2">
             <Label htmlFor="url" className="flex items-center gap-2">
               <LinkIcon className="h-4 w-4 text-muted-foreground" />
-              Video Link
-              <span className="text-xs text-muted-foreground">(optional)</span>
+              Link
+              <span className="text-xs text-muted-foreground">(any video, podcast, or web link)</span>
             </Label>
             <div className="relative">
               <Input
                 id="url"
-                placeholder="https://youtube.com/watch?v=..."
+                placeholder="https://youtube.com/watch?v=... or any web/video link"
                 value={url}
                 onChange={(e) => setUrl(e.target.value)}
                 disabled={isLoading}
@@ -395,8 +398,8 @@ export function AddVideoDialog({ onAddVideo, triggerButton }: AddVideoDialogProp
 
           {/* Helper text */}
           <p className="text-xs text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            💡 Provide at least one: a YouTube link, audio/video file, pasted transcript, or screenshots. 
-            Audio files are transcribed automatically using ElevenLabs.
+            💡 Provide at least one: any web/video/podcast link, audio/video file, pasted transcript, or screenshots. 
+            Links are automatically inspected and transcribed using AI.
           </p>
 
           <div className="flex gap-3 pt-2">
