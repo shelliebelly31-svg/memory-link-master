@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, CheckSquare, Highlighter, Mic, MicOff, MousePointer, Plus, RefreshCw, Upload } from 'lucide-react';
+import { Brain, CheckSquare, Highlighter, Mic, MicOff, MousePointer, Plus, RefreshCw } from 'lucide-react';
 import { TranscriptSegment, Highlight, HighlightType } from '@/types';
 import { formatTimestamp } from '@/lib/mockData';
 import { Button } from '@/components/ui/button';
