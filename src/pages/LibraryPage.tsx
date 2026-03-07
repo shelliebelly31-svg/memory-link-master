@@ -1,12 +1,14 @@
-import { useState, useMemo } from 'react';
-import { Search, SlidersHorizontal, X } from 'lucide-react';
+import { useState, useMemo, useRef, useCallback } from 'react';
+import { Search, SlidersHorizontal, X, RefreshCw } from 'lucide-react';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { VideoCard } from '@/components/video/VideoCard';
 import { AddVideoDialog } from '@/components/video/AddVideoDialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useVideos, useAddVideoWithSources, getDisplayStatus, DisplayStatus } from '@/hooks/useVideos';
+import { useVideos, useAddVideoWithSources, useRetryVideo, getDisplayStatus, DisplayStatus } from '@/hooks/useVideos';
+import { useQueryClient } from '@tanstack/react-query';
+import { useToast } from '@/hooks/use-toast';
 
 interface LibraryPageProps {
   onLogout: () => void;
