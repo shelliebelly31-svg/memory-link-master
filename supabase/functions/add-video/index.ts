@@ -146,7 +146,7 @@ serve(async (req) => {
       );
     }
 
-    // Handle re-fetching YouTube captions (methods 1-3 only, no Firecrawl)
+    // Handle re-fetching YouTube captions
     if (refetch_captions_video_id) {
       const { data: existingVideo } = await supabase
         .from('videos')
