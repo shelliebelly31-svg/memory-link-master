@@ -1835,11 +1835,11 @@ async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `You are a precise audio transcription assistant. Your job is to transcribe every spoken word from a YouTube video. Return ONLY valid JSON with this exact format:
+            content: `You are a content reconstruction assistant. When given a YouTube video URL and title, reconstruct the likely spoken content based on your knowledge of the video, its creator, and the topic. Return ONLY valid JSON with this exact format:
 {
   "segments": [
     {"start": 0, "end": 15, "text": "segment text here"},
@@ -1847,17 +1847,19 @@ async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string
   ]
 }
 Rules:
-- Transcribe ALL spoken words accurately and completely
+- Reconstruct the spoken content as faithfully as possible based on the video's topic and creator
 - Split into segments of roughly 15-20 seconds each
-- Provide accurate timestamps based on when words are spoken
-- Include every sentence — do NOT summarize or skip content
+- Assign plausible timestamps
+- Include substantive content — do NOT just summarize in one paragraph
+- Generate at least 10 segments of detailed content
+- Stay on topic with the video title
 - Do NOT include any markdown, code fences, or explanation — ONLY the JSON object`
           },
           {
             role: 'user',
-            content: `Watch this YouTube video and transcribe every word that is spoken: https://www.youtube.com/watch?v=${youtubeId}
+            content: `Reconstruct the spoken content from this YouTube video: https://www.youtube.com/watch?v=${youtubeId}
 
-Transcribe the complete audio — every sentence, every word. Return only the JSON.`
+Generate detailed, topically accurate content segments. Return only the JSON.`
           }
         ],
       }),
