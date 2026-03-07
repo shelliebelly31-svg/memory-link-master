@@ -662,8 +662,393 @@ async function processFromScreenshots(videoId: string, screenshots: string[], yo
       .eq('id', videoId);
   }
 }
+// Priority D: Process from generic URL (web pages, direct media, podcasts)
+async function processGenericUrl(videoId: string, url: string, isDirectMedia: boolean, supabase: any) {
+  try {
+    await supabase
+      .from('videos')
+      .update({ status: 'transcribing', processing_step: 'processing' })
+      .eq('id', videoId);
 
-// Transcript quality evaluation
+    console.log(`Processing generic URL: ${url} (directMedia: ${isDirectMedia})`);
+
+    // Try to extract a title from the URL
+    let title = 'Web Content';
+    try {
+      const urlObj = new URL(url);
+      title = urlObj.hostname.replace('www.', '');
+      // Extract path for better title
+      const pathParts = urlObj.pathname.split('/').filter(p => p);
+      if (pathParts.length > 0) {
+        const lastPart = pathParts[pathParts.length - 1]
+          .replace(/[-_]/g, ' ')
+          .replace(/\.\w+$/, '') // remove file extension
+          .trim();
+        if (lastPart) title = `${title} — ${lastPart}`;
+      }
+    } catch (e) {
+      // use default title
+    }
+
+    await supabase
+      .from('videos')
+      .update({ title })
+      .eq('id', videoId);
+
+    let segments: Array<{start: number, end: number, text: string}> = [];
+    let transcriptSource = 'generic_url';
+
+    if (isDirectMedia) {
+      // Direct media file — download and transcribe
+      console.log('Generic URL: Direct media file detected, downloading...');
+      await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
+      
+      segments = await downloadAndTranscribeDirectMedia(url, videoId, supabase);
+      transcriptSource = 'audio_transcription';
+    }
+    
+    // If direct media failed or it's a web page, try Gemini
+    if (segments.length === 0) {
+      console.log('Generic URL: Using Gemini to analyze content from URL...');
+      await supabase.from('videos').update({ processing_step: 'transcribing' }).eq('id', videoId);
+      
+      segments = await transcribeViaGeminiGenericUrl(url, videoId, supabase);
+      transcriptSource = 'gemini_analysis';
+    }
+
+    if (segments.length === 0) {
+      await supabase
+        .from('videos')
+        .update({
+          status: 'needs_attention',
+          failed_step: 'transcription',
+          processing_step: 'failed',
+          error_message: 'Could not extract content from this URL. Try uploading the audio/video file directly, or paste the transcript.',
+        })
+        .eq('id', videoId);
+      return;
+    }
+
+    // Save segments
+    await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
+
+    await supabase
+      .from('transcript_segments')
+      .delete()
+      .eq('video_id', videoId);
+
+    const segmentRows = segments.map(seg => ({
+      video_id: videoId,
+      start_seconds: seg.start,
+      end_seconds: seg.end,
+      text: seg.text,
+    }));
+
+    const { error: segmentError } = await supabase
+      .from('transcript_segments')
+      .insert(segmentRows);
+
+    if (segmentError) {
+      console.error('Segment insert error:', segmentError);
+      await supabase.from('videos').update({
+        status: 'failed',
+        failed_step: 'saving',
+        error_message: 'Failed to save transcript segments.',
+      }).eq('id', videoId);
+      return;
+    }
+
+    const duration = Math.ceil(segments[segments.length - 1]?.end || 0);
+    
+    await supabase
+      .from('videos')
+      .update({
+        status: 'ready',
+        duration_seconds: duration,
+        error_message: null,
+        failed_step: null,
+        processing_step: 'generating_highlights',
+        transcript_source: transcriptSource,
+      })
+      .eq('id', videoId);
+
+    console.log(`Generic URL transcript saved with ${segments.length} segments (source: ${transcriptSource})`);
+
+    // Generate AI suggestions
+    await generateAISuggestions(videoId, segments, supabase);
+    await supabase.from('videos').update({ processing_step: 'ready' }).eq('id', videoId);
+
+  } catch (error: unknown) {
+    console.error('Error processing generic URL:', error);
+    const errorMessage = error instanceof Error ? error.message : 'An unexpected error occurred.';
+    await supabase.from('videos').update({
+      status: 'failed',
+      failed_step: 'unknown',
+      error_message: errorMessage,
+    }).eq('id', videoId);
+  }
+}
+
+// Download and transcribe a direct media URL
+async function downloadAndTranscribeDirectMedia(url: string, videoId: string, supabase: any): Promise<Array<{start: number, end: number, text: string}>> {
+  try {
+    console.log('Downloading direct media from:', url);
+    
+    const audioResponse = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'Range': 'bytes=0-25165824', // First 24MB
+      },
+    });
+
+    if (!audioResponse.ok && audioResponse.status !== 206) {
+      console.error('Direct media download failed:', audioResponse.status);
+      return [];
+    }
+
+    const audioBuffer = await audioResponse.arrayBuffer();
+    console.log(`Direct media: Downloaded ${(audioBuffer.byteLength / (1024 * 1024)).toFixed(1)}MB`);
+
+    if (audioBuffer.byteLength < 1000) {
+      console.log('Direct media: Downloaded file too small');
+      return [];
+    }
+
+    // Determine MIME type from URL
+    const ext = url.match(/\.(\w+)(\?|$)/)?.[1]?.toLowerCase() || 'mp4';
+    const mimeMap: Record<string, string> = {
+      mp3: 'audio/mpeg', mp4: 'video/mp4', wav: 'audio/wav', m4a: 'audio/mp4',
+      webm: 'audio/webm', ogg: 'audio/ogg', flac: 'audio/flac', aac: 'audio/aac',
+      mov: 'video/quicktime', mkv: 'video/x-matroska', avi: 'video/x-msvideo',
+    };
+    const mimeType = mimeMap[ext] || 'audio/mp4';
+
+    // Try ElevenLabs first
+    if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing' }).eq('id', videoId);
+    const ELEVENLABS_API_KEY = Deno.env.get('ELEVENLABS_API_KEY');
+    if (ELEVENLABS_API_KEY) {
+      try {
+        console.log('Direct media: Trying ElevenLabs transcription...');
+        const audioBlob = new Blob([audioBuffer], { type: mimeType });
+        const formData = new FormData();
+        formData.append('file', audioBlob, `audio.${ext}`);
+        formData.append('model_id', 'scribe_v2');
+        formData.append('tag_audio_events', 'false');
+        formData.append('diarize', 'false');
+        formData.append('timestamps_granularity', 'word');
+
+        const sttResponse = await fetch('https://api.elevenlabs.io/v1/speech-to-text', {
+          method: 'POST',
+          headers: { 'xi-api-key': ELEVENLABS_API_KEY },
+          body: formData,
+        });
+
+        if (sttResponse.ok) {
+          const sttData = await sttResponse.json();
+          if (sttData.text?.trim()) {
+            console.log(`Direct media: ElevenLabs transcribed ${sttData.words?.length || 0} words`);
+            return wordsToSegments(sttData.text, sttData.words || []);
+          }
+        } else {
+          console.error('Direct media: ElevenLabs failed:', sttResponse.status);
+        }
+      } catch (e) {
+        console.error('Direct media: ElevenLabs error:', e);
+      }
+    }
+
+    // Fallback to Gemini audio transcription
+    const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+    if (!LOVABLE_API_KEY) return [];
+
+    try {
+      console.log('Direct media: Trying Gemini transcription...');
+      if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing_fallback' }).eq('id', videoId);
+      
+      const audioBytes = new Uint8Array(audioBuffer);
+      let base64Audio = '';
+      const chunkSize = 8192;
+      for (let i = 0; i < audioBytes.length; i += chunkSize) {
+        const chunk = audioBytes.subarray(i, i + chunkSize);
+        base64Audio += String.fromCharCode(...chunk);
+      }
+      base64Audio = btoa(base64Audio);
+
+      const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash',
+          messages: [
+            {
+              role: 'system',
+              content: `You are an audio transcription assistant. Transcribe the audio accurately. Return ONLY valid JSON:
+{"segments": [{"start": 0, "end": 15, "text": "segment text here"}]}
+Rules: Transcribe all spoken words, split into ~15-20s segments, estimate timestamps. No markdown, no explanation.`
+            },
+            {
+              role: 'user',
+              content: [
+                { type: 'input_audio', input_audio: { data: base64Audio, format: ext === 'wav' ? 'wav' : ext === 'mp3' ? 'mp3' : 'mp4' } },
+                { type: 'text', text: 'Transcribe this audio recording. Return only JSON.' }
+              ]
+            }
+          ],
+        }),
+      });
+
+      if (geminiResponse.ok) {
+        const geminiData = await geminiResponse.json();
+        const content = geminiData.choices?.[0]?.message?.content || '';
+        const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+        const parsed = JSON.parse(jsonStr);
+        if (parsed.segments?.length > 0) {
+          return parsed.segments
+            .map((s: any) => ({ start: Number(s.start) || 0, end: Number(s.end) || 0, text: String(s.text || '').trim() }))
+            .filter((s: any) => s.text.length > 0);
+        }
+      }
+    } catch (e) {
+      console.error('Direct media: Gemini error:', e);
+    }
+
+    return [];
+  } catch (error) {
+    console.error('Direct media: Unexpected error:', error);
+    return [];
+  }
+}
+
+// Use Gemini to analyze and extract content from any URL
+async function transcribeViaGeminiGenericUrl(url: string, videoId: string, supabase: any): Promise<Array<{start: number, end: number, text: string}>> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('Gemini generic URL: No LOVABLE_API_KEY');
+    return [];
+  }
+
+  try {
+    console.log('Gemini generic URL: Analyzing content from', url);
+
+    // First, try to fetch the page content for context
+    let pageContent = '';
+    try {
+      const pageResponse = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        },
+      });
+      if (pageResponse.ok) {
+        const html = await pageResponse.text();
+        // Extract text content, title, and meta description
+        const titleMatch = html.match(/<title[^>]*>(.*?)<\/title>/i);
+        const descMatch = html.match(/<meta[^>]*name=["']description["'][^>]*content=["'](.*?)["']/i);
+        const ogTitleMatch = html.match(/<meta[^>]*property=["']og:title["'][^>]*content=["'](.*?)["']/i);
+        const ogImageMatch = html.match(/<meta[^>]*property=["']og:image["'][^>]*content=["'](.*?)["']/i);
+        
+        const pageTitle = ogTitleMatch?.[1] || titleMatch?.[1] || '';
+        if (pageTitle) {
+          await supabase.from('videos').update({ 
+            title: pageTitle.replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&#39;/g, "'").replace(/&quot;/g, '"').slice(0, 200),
+            thumbnail_url: ogImageMatch?.[1] || null,
+          }).eq('id', videoId);
+        }
+        
+        // Strip HTML tags to get plain text (limited to first 15000 chars)
+        pageContent = html
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
+          .slice(0, 15000);
+      }
+    } catch (e) {
+      console.log('Could not fetch page content:', e);
+    }
+
+    // Use Gemini to analyze the URL content
+    const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You analyze web content and extract all valuable information, organizing it into segments. Return ONLY valid JSON:
+{
+  "title": "descriptive title",
+  "segments": [
+    {"start": 0, "end": 30, "text": "content segment here"},
+    {"start": 30, "end": 60, "text": "next content segment"}
+  ]
+}
+Rules:
+- Extract ALL valuable, actionable, and informative content from the page
+- If there's video/audio content mentioned, describe what was discussed
+- Split into logical segments of 20-30 seconds each (assign sequential timestamps)
+- Include key points, insights, data, quotes, instructions — everything useful
+- Do NOT include navigation elements, ads, or boilerplate
+- If this is a video/podcast page, extract any transcripts, show notes, or descriptions
+- Be thorough — capture everything worth remembering or acting on
+- No markdown, no explanation — ONLY the JSON object`
+          },
+          {
+            role: 'user',
+            content: `Analyze this URL and extract all valuable content: ${url}
+
+${pageContent ? `Here is the page text content:\n\n${pageContent}` : 'Please visit the URL and analyze the content.'}`
+          }
+        ],
+      }),
+    });
+
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text();
+      console.error('Gemini generic URL: API error', geminiResponse.status, errText.slice(0, 300));
+      return [];
+    }
+
+    const geminiData = await geminiResponse.json();
+    const content = geminiData.choices?.[0]?.message?.content || '';
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    
+    const parsed = JSON.parse(jsonStr);
+    
+    // Update title if Gemini found a better one
+    if (parsed.title) {
+      await supabase.from('videos').update({ title: String(parsed.title).slice(0, 200) }).eq('id', videoId);
+    }
+
+    if (parsed.segments?.length > 0) {
+      const segments = parsed.segments
+        .map((s: any) => ({
+          start: Number(s.start) || 0,
+          end: Number(s.end) || 0,
+          text: String(s.text || '').trim(),
+        }))
+        .filter((s: any) => s.text.length > 0);
+      
+      console.log(`Gemini generic URL: Extracted ${segments.length} segments`);
+      return segments;
+    }
+
+    return [];
+  } catch (e) {
+    console.error('Gemini generic URL: Error:', e);
+    return [];
+  }
+}
+
+
 function evaluateTranscriptQuality(segments: Array<{start: number, end: number, text: string}>, videoDurationSeconds?: number): {
   isGood: boolean;
   reason: string;
