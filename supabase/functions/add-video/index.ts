@@ -836,8 +836,18 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
               }
             }
           } else {
-            console.log('Audio transcription failed or empty — keeping weak captions as fallback');
-            transcriptSource = 'captions';
+            console.log('Audio transcription failed or empty — weak captions are not usable, setting needs_attention');
+            await supabase
+              .from('videos')
+              .update({
+                captions_missing: true,
+                status: 'needs_attention',
+                failed_step: 'captions',
+                processing_step: 'failed',
+                error_message: 'Captions were low quality (page text/comments, not spoken dialogue) and audio transcription failed. Please add the transcript manually.',
+              })
+              .eq('id', videoId);
+            return;
           }
         } else {
           console.log('Caption quality check PASSED — using fetched captions');
@@ -1096,22 +1106,7 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     console.error('Timedtext method failed:', e);
   }
 
-  // Method 4: Firecrawl scrape (extracts page content as transcript substitute)
-  try {
-    const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-    if (FIRECRAWL_API_KEY) {
-      console.log('Method 4: Trying Firecrawl scrape for', youtubeId);
-      const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
-      if (firecrawlResult.length > 0) {
-        console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
-        return firecrawlResult;
-      }
-    } else {
-      console.log('Firecrawl not configured, skipping Method 4');
-    }
-  } catch (e) {
-    console.error('Firecrawl method failed:', e);
-  }
+  // Note: Firecrawl scrape removed — it scrapes YouTube page comments/metadata, not actual spoken transcript
 
   console.log('All caption methods failed for', youtubeId);
   return [];
