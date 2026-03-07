@@ -445,16 +445,39 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
         )}
 
 
+        {/* Needs attention banner */}
+        {video.status === 'needs_attention' && (
+          <div className="px-4 pt-4">
+            <div className="bg-destructive/10 border border-destructive/30 rounded-lg p-4 flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive shrink-0 mt-0.5" />
+              <div className="flex-1 min-w-0">
+                <h3 className="font-semibold text-sm text-destructive">Processing issue</h3>
+                <p className="text-sm text-muted-foreground mt-1">
+                  {video.error_message || 'Something went wrong during processing.'}
+                </p>
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                className="shrink-0 border-destructive/30 text-destructive hover:bg-destructive/10"
+                disabled={retryVideoMutation.isPending}
+                onClick={() => retryVideoMutation.mutate({ videoId: video.id })}
+              >
+                <RotateCcw className={cn("h-4 w-4 mr-1.5", retryVideoMutation.isPending && "animate-spin")} />
+                Retry
+              </Button>
+            </div>
+          </div>
+        )}
+
         {/* No transcript CTA */}
-        {segments.length === 0 && (
+        {segments.length === 0 && video.status !== 'needs_attention' && (
           <div className="px-4 py-8">
             <div className="bg-muted/50 border border-dashed border-border rounded-lg p-6 text-center">
               <FileText className="h-10 w-10 mx-auto text-muted-foreground mb-3" />
               <h3 className="font-semibold mb-1">No transcript available</h3>
               <p className="text-sm text-muted-foreground mb-4">
-                {video.status === 'needs_attention' 
-                  ? video.error_message || 'Add a transcript to unlock all features'
-                  : 'Add a transcript to unlock all features'}
+                Add a transcript to unlock all features
               </p>
               <Button onClick={() => navigate(`/video/${id}/add-transcript`)}>
                 <Plus className="h-4 w-4 mr-2" />
