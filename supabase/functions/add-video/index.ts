@@ -1862,8 +1862,9 @@ Rules:
           {
             role: 'user',
             content: `Reconstruct the spoken content from this YouTube video: https://www.youtube.com/watch?v=${youtubeId}
+Video title: "${videoTitle || 'Unknown'}"
 
-Generate detailed, topically accurate content segments. Return only the JSON.`
+Based on the video title and creator, generate detailed, topically accurate content segments about this specific topic. Return only the JSON.`
           }
         ],
       }),
