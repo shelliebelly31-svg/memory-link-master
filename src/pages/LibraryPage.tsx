@@ -184,6 +184,7 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
           </div>
         )}
       </div>
+      </div>
     </PageLayout>
   );
 }
