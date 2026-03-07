@@ -69,8 +69,6 @@ interface TranscriptViewProps {
   isRecording?: boolean;
   onStartRecording?: () => void;
   onStopRecording?: () => void;
-  onReprocessTranscript?: () => Promise<void>;
-  isReprocessing?: boolean;
 }
 
 interface SelectionState {
