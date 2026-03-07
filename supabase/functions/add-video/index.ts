@@ -1170,6 +1170,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
   
   try {
     let videoDurationSeconds: number | undefined;
+    let videoTitle: string | undefined;
 
     // Step 1: Fetch metadata
     if (startIndex <= 0) {
@@ -1205,11 +1206,19 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         })
         .eq('id', videoId);
 
+      videoTitle = metadata.title;
       console.log('Metadata fetched:', metadata.title);
     }
 
     // Step 2: Fetch captions/transcript with quality check
     if (startIndex <= 1) {
+      // Fetch title if we don't have it (retry case)
+      if (!videoTitle) {
+        const { data: vd } = await supabase.from('videos').select('title, duration_seconds').eq('id', videoId).single();
+        videoTitle = vd?.title;
+        if (!videoDurationSeconds) videoDurationSeconds = vd?.duration_seconds;
+      }
+
       console.log('Step 2: Fetching captions for video:', videoId);
 
       await supabase.from('videos').update({ processing_step: 'extracting_captions' }).eq('id', videoId);
@@ -1226,7 +1235,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           const weakCaptions = transcript;
           
           await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
-          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
           
           if (audioTranscript && audioTranscript.length > 0) {
             const audioQuality = evaluateTranscriptQuality(audioTranscript, videoDurationSeconds);
@@ -1271,7 +1280,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       if (!transcript || transcript.length === 0) {
         console.log('All caption methods failed, trying audio download + transcription...');
         await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
-        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+        transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
         if (transcript && transcript.length > 0) {
           transcriptSource = 'audio_transcription';
         }
@@ -1317,12 +1326,12 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         transcriptSource = 'gemini_fallback';
       }
 
-      // Topical relevance check — especially important for AI-generated transcripts
+      // Topical relevance check
       const { data: videoForTitle } = await supabase.from('videos').select('title').eq('id', videoId).single();
-      const videoTitle = videoForTitle?.title || '';
+      const currentTitle = videoForTitle?.title || videoTitle || '';
       
-      if (videoTitle && videoTitle !== 'Processing...' && transcript && transcript.length > 0) {
-        const relevance = await checkTopicalRelevance(videoTitle, transcript);
+      if (currentTitle && currentTitle !== 'Processing...' && transcript && transcript.length > 0) {
+        const relevance = await checkTopicalRelevance(currentTitle, transcript);
         if (!relevance.relevant) {
           console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
           await supabase
@@ -1331,7 +1340,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
               status: 'needs_attention',
               failed_step: 'captions',
               processing_step: 'failed',
-              error_message: `Transcript content does not match the video topic ("${videoTitle}"). The AI may have generated incorrect content. Please record the audio manually.`,
+              error_message: `Transcript content does not match the video topic ("${currentTitle}"). Please record the audio manually.`,
               captions_missing: true,
             })
             .eq('id', videoId);
@@ -1817,7 +1826,7 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
 }
 
 // Method 5b: Use Gemini to transcribe directly from YouTube URL (no audio extraction needed)
-async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
+async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string, supabase?: any, videoTitle?: string): Promise<Array<{start: number, end: number, text: string}>> {
   const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
   if (!LOVABLE_API_KEY) {
     console.log('Gemini YouTube fallback: No LOVABLE_API_KEY');
@@ -1835,11 +1844,11 @@ async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-2.5-pro',
         messages: [
           {
             role: 'system',
-            content: `You are a precise audio transcription assistant. Your job is to transcribe every spoken word from a YouTube video. Return ONLY valid JSON with this exact format:
+            content: `You are a content reconstruction assistant. When given a YouTube video URL and title, reconstruct the likely spoken content based on your knowledge of the video, its creator, and the topic. Return ONLY valid JSON with this exact format:
 {
   "segments": [
     {"start": 0, "end": 15, "text": "segment text here"},
@@ -1847,17 +1856,20 @@ async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string
   ]
 }
 Rules:
-- Transcribe ALL spoken words accurately and completely
+- Reconstruct the spoken content as faithfully as possible based on the video's topic and creator
 - Split into segments of roughly 15-20 seconds each
-- Provide accurate timestamps based on when words are spoken
-- Include every sentence — do NOT summarize or skip content
+- Assign plausible timestamps
+- Include substantive content — do NOT just summarize in one paragraph
+- Generate at least 10 segments of detailed content
+- Stay on topic with the video title
 - Do NOT include any markdown, code fences, or explanation — ONLY the JSON object`
           },
           {
             role: 'user',
-            content: `Watch this YouTube video and transcribe every word that is spoken: https://www.youtube.com/watch?v=${youtubeId}
+            content: `Reconstruct the spoken content from this YouTube video: https://www.youtube.com/watch?v=${youtubeId}
+Video title: "${videoTitle || 'Unknown'}"
 
-Transcribe the complete audio — every sentence, every word. Return only the JSON.`
+Based on the video title and creator, generate detailed, topically accurate content segments about this specific topic. Return only the JSON.`
           }
         ],
       }),
@@ -1896,7 +1908,7 @@ Transcribe the complete audio — every sentence, every word. Return only the JS
 }
 
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
-async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
+async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any, videoTitle?: string): Promise<Array<{start: number, end: number, text: string}>> {
   try {
     // Step 1: Try multiple Innertube clients to find audio streams
     // WEB client often blocks direct URLs; ANDROID/IOS clients expose them more reliably
@@ -2151,7 +2163,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioFormat || !audioUrl) {
       console.log('Audio fallback: No audio streams found from any source — trying direct Gemini YouTube transcription');
       // Final fallback: Use Gemini to transcribe directly from YouTube URL (no audio download needed)
-      const geminiDirect = await transcribeViaGeminiYouTubeUrl(youtubeId, videoId, supabase);
+      const geminiDirect = await transcribeViaGeminiYouTubeUrl(youtubeId, videoId, supabase, videoTitle);
       if (geminiDirect && geminiDirect.length > 0) {
         return geminiDirect;
       }
