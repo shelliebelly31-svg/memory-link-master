@@ -177,9 +177,9 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
         ) : (
           <div className="text-center py-12">
             <Search className="h-12 w-12 text-muted-foreground/30 mx-auto mb-3" />
-            <p className="text-muted-foreground">{videos.length === 0 ? 'No videos yet' : 'No videos found'}</p>
+            <p className="text-muted-foreground">{videos.length === 0 ? 'No content yet' : 'No videos found'}</p>
             <p className="text-sm text-muted-foreground/70 mt-1">
-              {videos.length === 0 ? 'Add your first YouTube video to get started' : 'Try adjusting your search or filters'}
+              {videos.length === 0 ? 'Add any video, podcast, or web link to get started' : 'Try adjusting your search or filters'}
             </p>
           </div>
         )}
