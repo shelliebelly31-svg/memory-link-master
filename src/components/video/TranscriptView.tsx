@@ -99,7 +99,6 @@ export function TranscriptView({
   onPlayVideo,
   onResegment,
   isResegmenting,
-  onFixTimestampsViaAudio,
   isFixingTimestamps,
   onRecordAndTranscribe,
   isRecording,
