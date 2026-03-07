@@ -1331,7 +1331,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
       const currentTitle = videoForTitle?.title || videoTitle || '';
       
       if (currentTitle && currentTitle !== 'Processing...' && transcript && transcript.length > 0) {
-        const relevance = await checkTopicalRelevance(videoTitle, transcript);
+        const relevance = await checkTopicalRelevance(currentTitle, transcript);
         if (!relevance.relevant) {
           console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
           await supabase
@@ -1340,7 +1340,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
               status: 'needs_attention',
               failed_step: 'captions',
               processing_step: 'failed',
-              error_message: `Transcript content does not match the video topic ("${videoTitle}"). Please record the audio manually.`,
+              error_message: `Transcript content does not match the video topic ("${currentTitle}"). Please record the audio manually.`,
               captions_missing: true,
             })
             .eq('id', videoId);
