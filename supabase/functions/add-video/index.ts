@@ -418,10 +418,16 @@ serve(async (req) => {
         console.error('Screenshot processing error:', e)
       );
     }
-    // Priority C: Only link provided
-    else if (hasLink && videoId) {
+    // Priority C: YouTube link
+    else if (hasLink && isYouTube && videoId) {
       processVideoFromLink(video.id, videoId, supabase).catch(e => 
         console.error('Link processing error:', e)
+      );
+    }
+    // Priority D: Generic URL (web page, direct media, podcast)
+    else if (hasLink && !isYouTube && genericUrl) {
+      processGenericUrl(video.id, genericUrl, isDirectMedia, supabase).catch(e => 
+        console.error('Generic URL processing error:', e)
       );
     }
 
