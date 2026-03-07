@@ -567,8 +567,6 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                    onStartRecording={handleStartRecording}
                    onStopRecording={handleStopRecording}
                    isRecording={isRecording}
-                   onReprocessTranscript={video.youtube_id && !video.youtube_id.startsWith('manual-') ? handleReprocessTranscript : undefined}
-                   isReprocessing={isReprocessing}
                  />
               </TabsContent>
               
