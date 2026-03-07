@@ -498,19 +498,6 @@ export function TranscriptView({
           </Button>
         )}
 
-        {/* Re-fetch YouTube captions button */}
-        {onRefetchCaptions && (
-          <Button
-            variant="outline"
-            size="sm"
-            className="mt-2 w-full gap-1.5 text-xs text-muted-foreground"
-            onClick={onRefetchCaptions}
-            disabled={isRefetchingCaptions}
-          >
-            <RefreshCw className={cn("h-3 w-3", isRefetchingCaptions && "animate-spin")} />
-            {isRefetchingCaptions ? 'Fetching captions...' : 'Re-fetch YouTube captions (fix timestamps)'}
-          </Button>
-        )}
 
         {/* Record & Transcribe */}
         {onStartRecording && onStopRecording && (
