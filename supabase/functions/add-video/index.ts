@@ -1170,6 +1170,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
   
   try {
     let videoDurationSeconds: number | undefined;
+    let videoTitle: string | undefined;
 
     // Step 1: Fetch metadata
     if (startIndex <= 0) {
