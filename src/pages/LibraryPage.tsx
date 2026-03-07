@@ -23,6 +23,59 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
 
   const { data: videos = [], isLoading } = useVideos();
   const addVideo = useAddVideoWithSources();
+  const retryVideo = useRetryVideo();
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 80;
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    if (scrollRef.current && scrollRef.current.scrollTop > 0) return;
+    const diff = e.touches[0].clientY - touchStartY.current;
+    if (diff > 0) {
+      setPullDistance(Math.min(diff * 0.5, 120));
+    }
+  }, [isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(PULL_THRESHOLD);
+
+      // Find needs_attention videos and reprocess them
+      const needsAttentionVideos = videos.filter(v => v.status === 'needs_attention' || v.status === 'failed');
+
+      if (needsAttentionVideos.length > 0) {
+        toast({
+          title: 'Reprocessing videos...',
+          description: `Retrying ${needsAttentionVideos.length} video${needsAttentionVideos.length > 1 ? 's' : ''} that need attention.`,
+        });
+
+        await Promise.allSettled(
+          needsAttentionVideos.map(v => retryVideo.mutateAsync({ videoId: v.id }))
+        );
+      } else {
+        // Just refresh data if no videos need attention
+        await queryClient.invalidateQueries({ queryKey: ['videos'] });
+        toast({ title: 'Refreshed', description: 'All videos are up to date.' });
+      }
+
+      setIsRefreshing(false);
+    }
+    setPullDistance(0);
+  }, [pullDistance, isRefreshing, videos, retryVideo, queryClient, toast]);
 
   const filteredVideos = useMemo(() => {
     return videos.filter(video => {
@@ -43,6 +96,33 @@ export default function LibraryPage({ onLogout }: LibraryPageProps) {
 
   return (
     <PageLayout onLogout={onLogout}>
+      <div
+        ref={scrollRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="relative"
+        style={{ overscrollBehavior: 'contain' }}
+      >
+        {/* Pull-to-refresh indicator */}
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all duration-200"
+          style={{ height: pullDistance > 0 ? pullDistance : 0 }}
+        >
+          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+            <RefreshCw
+              className={`h-5 w-5 transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
+              style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 3}deg)` }}
+            />
+            <span className="text-xs">
+              {isRefreshing
+                ? 'Reprocessing...'
+                : pullDistance >= PULL_THRESHOLD
+                  ? 'Release to reprocess'
+                  : 'Pull to reprocess failed videos'}
+            </span>
+          </div>
+        </div>
       <div className="px-4 py-6 space-y-6">
         <div className="flex items-center justify-between">
           <div>
