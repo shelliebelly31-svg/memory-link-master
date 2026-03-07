@@ -242,31 +242,6 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     playerControlsRef.current?.pause();
   }, []);
 
-  const handleReprocessTranscript = useCallback(async () => {
-    if (!id) return;
-    setIsReprocessing(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('add-video', {
-        body: { retry_video_id: id, retry_from_step: 'captions' },
-      });
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-      toast({
-        title: 'Re-processing transcript',
-        description: 'Running quality check with audio transcription fallback...',
-      });
-      queryClient.invalidateQueries({ queryKey: ['video', id] });
-      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
-    } catch (err: any) {
-      toast({
-        title: 'Re-process failed',
-        description: err.message || 'Something went wrong',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsReprocessing(false);
-    }
-  }, [id, queryClient, toast]);
 
   // Loading state
   if (videoLoading || segmentsLoading) {
