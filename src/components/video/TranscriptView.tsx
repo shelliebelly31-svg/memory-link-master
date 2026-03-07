@@ -63,8 +63,6 @@ interface TranscriptViewProps {
   onPlayVideo?: () => void;
   onResegment?: () => Promise<void>;
   isResegmenting?: boolean;
-  onRefetchCaptions?: () => Promise<void>;
-  isRefetchingCaptions?: boolean;
   onFixTimestampsViaAudio?: (file: File) => Promise<void>;
   isFixingTimestamps?: boolean;
   onRecordAndTranscribe?: (blob: Blob) => Promise<void>;
