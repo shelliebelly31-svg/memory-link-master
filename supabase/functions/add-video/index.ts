@@ -118,7 +118,6 @@ serve(async (req) => {
       retry_video_id, 
       retry_from_step,
       add_transcript_to_video_id,
-      refetch_captions_video_id,
     } = await req.json();
     
     // Get auth header
