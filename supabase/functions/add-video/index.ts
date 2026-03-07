@@ -735,7 +735,6 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
     if (pageIndicatorCount >= 2) {
       return { isGood: false, reason: 'Content appears to be page text, not spoken dialogue' };
     }
-    // Even without page indicators, synthetic timestamps from Firecrawl should be treated as low quality
     return { isGood: false, reason: 'Synthetic timestamps detected — likely scraped page text, not real captions' };
   }
 
