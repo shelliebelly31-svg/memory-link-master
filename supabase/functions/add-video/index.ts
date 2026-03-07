@@ -169,7 +169,7 @@ serve(async (req) => {
         );
       }
 
-      // Try YouTube caption methods only (no Firecrawl fallback)
+      // Try YouTube caption methods only
       let captions: Array<{start: number, end: number, text: string}> = [];
 
       try {
