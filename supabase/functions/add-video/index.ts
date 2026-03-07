@@ -1235,7 +1235,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           const weakCaptions = transcript;
           
           await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
-          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase);
+          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
           
           if (audioTranscript && audioTranscript.length > 0) {
             const audioQuality = evaluateTranscriptQuality(audioTranscript, videoDurationSeconds);
