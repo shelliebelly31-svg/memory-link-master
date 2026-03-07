@@ -1328,9 +1328,9 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
 
       // Topical relevance check
       const { data: videoForTitle } = await supabase.from('videos').select('title').eq('id', videoId).single();
-      const videoTitle = videoForTitle?.title || '';
+      const currentTitle = videoForTitle?.title || videoTitle || '';
       
-      if (videoTitle && videoTitle !== 'Processing...' && transcript && transcript.length > 0) {
+      if (currentTitle && currentTitle !== 'Processing...' && transcript && transcript.length > 0) {
         const relevance = await checkTopicalRelevance(videoTitle, transcript);
         if (!relevance.relevant) {
           console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
