@@ -1317,26 +1317,30 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         transcriptSource = 'gemini_fallback';
       }
 
-      // Topical relevance check — especially important for AI-generated transcripts
-      const { data: videoForTitle } = await supabase.from('videos').select('title').eq('id', videoId).single();
-      const videoTitle = videoForTitle?.title || '';
-      
-      if (videoTitle && videoTitle !== 'Processing...' && transcript && transcript.length > 0) {
-        const relevance = await checkTopicalRelevance(videoTitle, transcript);
-        if (!relevance.relevant) {
-          console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
-          await supabase
-            .from('videos')
-            .update({
-              status: 'needs_attention',
-              failed_step: 'captions',
-              processing_step: 'failed',
-              error_message: `Transcript content does not match the video topic ("${videoTitle}"). The AI may have generated incorrect content. Please record the audio manually.`,
-              captions_missing: true,
-            })
-            .eq('id', videoId);
-          return;
+      // Topical relevance check — skip for gemini_fallback since it's knowledge-based reconstruction
+      if (transcriptSource !== 'gemini_fallback') {
+        const { data: videoForTitle } = await supabase.from('videos').select('title').eq('id', videoId).single();
+        const videoTitle = videoForTitle?.title || '';
+        
+        if (videoTitle && videoTitle !== 'Processing...' && transcript && transcript.length > 0) {
+          const relevance = await checkTopicalRelevance(videoTitle, transcript);
+          if (!relevance.relevant) {
+            console.log(`Topical relevance FAILED: "${relevance.reason}". Rejecting transcript.`);
+            await supabase
+              .from('videos')
+              .update({
+                status: 'needs_attention',
+                failed_step: 'captions',
+                processing_step: 'failed',
+                error_message: `Transcript content does not match the video topic ("${videoTitle}"). The AI may have generated incorrect content. Please record the audio manually.`,
+                captions_missing: true,
+              })
+              .eq('id', videoId);
+            return;
+          }
         }
+      } else {
+        console.log('Skipping topical relevance check for gemini_fallback (knowledge-based reconstruction)');
       }
 
       await supabase.from('videos').update({ processing_step: 'segmenting' }).eq('id', videoId);
