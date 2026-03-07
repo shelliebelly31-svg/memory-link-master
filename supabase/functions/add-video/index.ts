@@ -1373,6 +1373,17 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     // WEB client often blocks direct URLs; ANDROID/IOS clients expose them more reliably
     const clientConfigs = [
       {
+        name: 'TV_EMBEDDED',
+        clientName: 'TVHTML5_SIMPLY_EMBEDDED_PLAYER',
+        clientVersion: '2.0',
+        userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        extraBody: {
+          thirdParty: { embedUrl: 'https://www.youtube.com/' },
+          racyCheckOk: true,
+          contentCheckOk: true,
+        },
+      },
+      {
         name: 'WEB',
         clientName: 'WEB',
         clientVersion: '2.20240101.00.00',
@@ -1410,6 +1421,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
             },
           },
           videoId: youtubeId,
+          ...(client as any).extraBody,
         };
 
         // Android client needs androidSdkVersion
@@ -1473,8 +1485,57 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
       }
     }
 
+    // Fallback: Try Piped API instances if Innertube failed
+    if (!audioUrl) {
+      const pipedInstances = [
+        'https://pipedapi.kavin.rocks',
+        'https://pipedapi.adminforge.de',
+        'https://pipedapi.in.projectsegfau.lt',
+      ];
+
+      for (const instance of pipedInstances) {
+        try {
+          console.log(`Audio fallback: Trying Piped instance ${instance} for`, youtubeId);
+          const pipedResponse = await fetch(`${instance}/streams/${youtubeId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+
+          if (!pipedResponse.ok) {
+            console.log(`Audio fallback: Piped ${instance} returned ${pipedResponse.status}`);
+            continue;
+          }
+
+          const pipedData = await pipedResponse.json();
+          const audioStreams = pipedData?.audioStreams || [];
+          
+          if (audioStreams.length === 0) {
+            console.log(`Audio fallback: Piped ${instance} — no audio streams`);
+            continue;
+          }
+
+          // Sort by bitrate, prefer mp4a
+          const sorted = audioStreams
+            .filter((s: any) => s.url)
+            .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+          
+          const best = sorted.find((s: any) => s.mimeType?.includes('mp4a') || s.codec?.includes('mp4a'))
+            || sorted[0];
+
+          if (best?.url) {
+            audioUrl = best.url;
+            audioFormat = { mimeType: best.mimeType || 'audio/mp4', bitrate: best.bitrate };
+            usedClient = `Piped(${instance})`;
+            console.log(`Audio fallback: Piped found audio! (${best.mimeType}, bitrate: ${best.bitrate})`);
+            break;
+          }
+        } catch (e) {
+          console.error(`Audio fallback: Piped ${instance} error:`, e);
+        }
+      }
+    }
+
     if (!audioFormat || !audioUrl) {
-      console.log('Audio fallback: No audio streams found from any client');
+      console.log('Audio fallback: No audio streams found from any source');
       return [];
     }
 
