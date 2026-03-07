@@ -562,15 +562,11 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onPlayVideo={() => playerControlsRef.current?.play()}
                    onResegment={handleResegment}
                    isResegmenting={isResegmenting}
-                   onRefetchCaptions={video.youtube_id && !video.youtube_id.startsWith('manual-') ? handleRefetchCaptions : undefined}
-                   isRefetchingCaptions={isRefetchingCaptions}
                    onFixTimestampsViaAudio={handleFixTimestampsViaAudio}
                    isFixingTimestamps={isFixingTimestamps}
                    onStartRecording={handleStartRecording}
                    onStopRecording={handleStopRecording}
                    isRecording={isRecording}
-                   onReprocessTranscript={video.youtube_id && !video.youtube_id.startsWith('manual-') ? handleReprocessTranscript : undefined}
-                   isReprocessing={isReprocessing}
                  />
               </TabsContent>
               
