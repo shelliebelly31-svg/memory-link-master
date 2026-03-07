@@ -1899,7 +1899,7 @@ Based on the video title and creator, generate detailed, topically accurate cont
 }
 
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
-async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
+async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any, videoTitle?: string): Promise<Array<{start: number, end: number, text: string}>> {
   try {
     // Step 1: Try multiple Innertube clients to find audio streams
     // WEB client often blocks direct URLs; ANDROID/IOS clients expose them more reliably
