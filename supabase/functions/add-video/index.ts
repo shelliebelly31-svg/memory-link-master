@@ -1277,6 +1277,24 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         }
       }
 
+      // Last resort: Try Firecrawl page scrape (page text, not spoken word)
+      if (!transcript || transcript.length === 0) {
+        const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+        if (FIRECRAWL_API_KEY) {
+          try {
+            console.log('Last resort: Trying Firecrawl page scrape for', youtubeId);
+            await supabase.from('videos').update({ processing_step: 'scraping_page' }).eq('id', videoId);
+            transcript = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
+            if (transcript && transcript.length > 0) {
+              transcriptSource = 'firecrawl_scrape';
+              console.log(`Firecrawl last resort: Got ${transcript.length} segments (page text, not spoken word)`);
+            }
+          } catch (e) {
+            console.error('Firecrawl last resort failed:', e);
+          }
+        }
+      }
+
       if (!transcript || transcript.length === 0) {
         await supabase
           .from('videos')
@@ -1289,7 +1307,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
           })
           .eq('id', videoId);
         
-        console.log('Captions and audio transcription both failed, set to needs_attention');
+        console.log('All methods failed (captions, audio, Firecrawl), set to needs_attention');
         return;
       }
 
