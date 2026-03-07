@@ -146,7 +146,7 @@ serve(async (req) => {
       );
     }
 
-    // Handle re-fetching YouTube captions (methods 1-3 only, no Firecrawl)
+    // Handle re-fetching YouTube captions
     if (refetch_captions_video_id) {
       const { data: existingVideo } = await supabase
         .from('videos')
@@ -169,7 +169,7 @@ serve(async (req) => {
         );
       }
 
-      // Try YouTube caption methods only (no Firecrawl fallback)
+      // Try YouTube caption methods only
       let captions: Array<{start: number, end: number, text: string}> = [];
 
       try {
@@ -724,10 +724,9 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
     return { isGood: false, reason: `${largeGaps} large timestamp gaps — missing spoken continuity` };
   }
 
-  // Check 5: All timestamps are 0 or synthetic (30s intervals = Firecrawl page scrape)
+  // Check 5: All timestamps are 0 or synthetic (30s intervals)
   const allSyntheticTimestamps = segments.every((s, i) => s.start === i * 30);
   if (allSyntheticTimestamps && segments.length > 2) {
-    // This is likely Firecrawl-generated page text with fake 30s intervals
     // Check if content looks like page text vs speech
     const fullText = segments.map(s => s.text).join(' ').toLowerCase();
     const pageIndicators = ['subscribe', 'click here', 'copyright', 'privacy policy', 'terms of service', 'all rights reserved', 'sign in', 'sign up', 'cookies'];
@@ -735,7 +734,6 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
     if (pageIndicatorCount >= 2) {
       return { isGood: false, reason: 'Content appears to be page text, not spoken dialogue' };
     }
-    // Even without page indicators, synthetic timestamps from Firecrawl should be treated as low quality
     return { isGood: false, reason: 'Synthetic timestamps detected — likely scraped page text, not real captions' };
   }
 
@@ -1106,70 +1104,8 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     console.error('Timedtext method failed:', e);
   }
 
-  // Note: Firecrawl scrape removed — it scrapes YouTube page comments/metadata, not actual spoken transcript
-
   console.log('All caption methods failed for', youtubeId);
   return [];
-}
-
-// Method 4: Use Firecrawl to scrape YouTube page content
-async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Promise<Array<{start: number, end: number, text: string}>> {
-  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
-  
-  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${apiKey}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify({
-      url: videoUrl,
-      formats: ['markdown'],
-      onlyMainContent: true,
-    }),
-  });
-
-  if (!response.ok) {
-    console.error('Firecrawl API error:', response.status);
-    return [];
-  }
-
-  const data = await response.json();
-  const markdown = data?.data?.markdown || data?.markdown || '';
-  
-  if (!markdown || markdown.trim().length < 100) {
-    console.log('Firecrawl: Not enough content extracted');
-    return [];
-  }
-
-  // Parse the markdown content into transcript-like segments
-  // Split by paragraphs and assign approximate timestamps
-  const paragraphs = markdown
-    .split(/\n\n+/)
-    .map((p: string) => p.replace(/\n/g, ' ').trim())
-    .filter((p: string) => p.length > 20 && !p.startsWith('#') && !p.startsWith('[') && !p.startsWith('!'));
-
-  if (paragraphs.length === 0) return [];
-
-  const segments: Array<{start: number, end: number, text: string}> = [];
-  let currentTime = 0;
-  const avgSegmentDuration = 30; // approximate 30s per paragraph
-
-  for (const para of paragraphs) {
-    segments.push({
-      start: currentTime,
-      end: currentTime + avgSegmentDuration,
-      text: para,
-    });
-    currentTime += avgSegmentDuration;
-  }
-
-  // Update end times
-  for (let i = 0; i < segments.length - 1; i++) {
-    segments[i].end = segments[i + 1].start;
-  }
-
-  return segments;
 }
 
 // Method 1: Use YouTube's Innertube API
