@@ -118,7 +118,6 @@ serve(async (req) => {
       retry_video_id, 
       retry_from_step,
       add_transcript_to_video_id,
-      refetch_captions_video_id,
     } = await req.json();
     
     // Get auth header
@@ -146,90 +145,6 @@ serve(async (req) => {
       );
     }
 
-    // Handle re-fetching YouTube captions
-    if (refetch_captions_video_id) {
-      const { data: existingVideo } = await supabase
-        .from('videos')
-        .select('id, user_id, youtube_id')
-        .eq('id', refetch_captions_video_id)
-        .eq('user_id', user.id)
-        .single();
-
-      if (!existingVideo) {
-        return new Response(
-          JSON.stringify({ error: 'Video not found or access denied' }),
-          { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      if (!existingVideo.youtube_id || existingVideo.youtube_id.startsWith('manual-')) {
-        return new Response(
-          JSON.stringify({ error: 'This video does not have a YouTube source to fetch captions from' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Try YouTube caption methods only
-      let captions: Array<{start: number, end: number, text: string}> = [];
-
-      try {
-        console.log('Refetch: Trying Innertube for', existingVideo.youtube_id);
-        captions = await fetchCaptionsViaInnertube(existingVideo.youtube_id);
-      } catch (e) { console.error('Innertube failed:', e); }
-
-      if (captions.length === 0) {
-        try {
-          console.log('Refetch: Trying HTML scrape');
-          captions = await fetchCaptionsViaHtmlScrape(existingVideo.youtube_id);
-        } catch (e) { console.error('HTML scrape failed:', e); }
-      }
-
-      if (captions.length === 0) {
-        try {
-          console.log('Refetch: Trying Timedtext API');
-          captions = await fetchCaptionsViaTimedtext(existingVideo.youtube_id);
-        } catch (e) { console.error('Timedtext failed:', e); }
-      }
-
-      if (captions.length === 0) {
-        return new Response(
-          JSON.stringify({ error: 'Could not fetch YouTube captions. The video may not have captions available.' }),
-          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      // Replace existing segments
-      await supabase.from('transcript_segments').delete().eq('video_id', refetch_captions_video_id);
-
-      const segmentRows = captions.map(seg => ({
-        video_id: refetch_captions_video_id,
-        start_seconds: seg.start,
-        end_seconds: seg.end,
-        text: seg.text,
-      }));
-
-      const { error: segmentError } = await supabase.from('transcript_segments').insert(segmentRows);
-      if (segmentError) {
-        return new Response(
-          JSON.stringify({ error: 'Failed to save captions' }),
-          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-
-      const duration = Math.ceil(captions[captions.length - 1]?.end || 0);
-      await supabase.from('videos').update({
-        duration_seconds: duration,
-        captions_missing: false,
-        source_type: 'link',
-      }).eq('id', refetch_captions_video_id);
-
-      console.log(`Re-fetched YouTube captions: ${captions.length} segments`);
-
-      return new Response(
-        JSON.stringify({ success: true, segment_count: captions.length }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
 
     // Handle adding transcript to existing video (for needs_attention state)
     if (add_transcript_to_video_id) {
