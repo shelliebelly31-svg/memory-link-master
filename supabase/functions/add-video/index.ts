@@ -1366,6 +1366,85 @@ function combineShortSegments(segments: Array<{start: number, end: number, text:
   return combined;
 }
 
+// Method 5b: Use Gemini to transcribe directly from YouTube URL (no audio extraction needed)
+async function transcribeViaGeminiYouTubeUrl(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
+  const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
+  if (!LOVABLE_API_KEY) {
+    console.log('Gemini YouTube fallback: No LOVABLE_API_KEY');
+    return [];
+  }
+
+  try {
+    console.log('Gemini YouTube fallback: Transcribing directly from YouTube URL for', youtubeId);
+    if (videoId && supabase) await supabase.from('videos').update({ processing_step: 'transcribing_fallback' }).eq('id', videoId);
+
+    const geminiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: 'google/gemini-2.5-flash',
+        messages: [
+          {
+            role: 'system',
+            content: `You are a precise audio transcription assistant. Your job is to transcribe every spoken word from a YouTube video. Return ONLY valid JSON with this exact format:
+{
+  "segments": [
+    {"start": 0, "end": 15, "text": "segment text here"},
+    {"start": 15, "end": 30, "text": "next segment text"}
+  ]
+}
+Rules:
+- Transcribe ALL spoken words accurately and completely
+- Split into segments of roughly 15-20 seconds each
+- Provide accurate timestamps based on when words are spoken
+- Include every sentence — do NOT summarize or skip content
+- Do NOT include any markdown, code fences, or explanation — ONLY the JSON object`
+          },
+          {
+            role: 'user',
+            content: `Watch this YouTube video and transcribe every word that is spoken: https://www.youtube.com/watch?v=${youtubeId}
+
+Transcribe the complete audio — every sentence, every word. Return only the JSON.`
+          }
+        ],
+      }),
+    });
+
+    if (!geminiResponse.ok) {
+      const errText = await geminiResponse.text();
+      console.error('Gemini YouTube fallback: API error', geminiResponse.status, errText.slice(0, 300));
+      return [];
+    }
+
+    const geminiData = await geminiResponse.json();
+    const content = geminiData.choices?.[0]?.message?.content || '';
+    const jsonStr = content.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim();
+    
+    const parsed = JSON.parse(jsonStr);
+    if (parsed.segments && Array.isArray(parsed.segments) && parsed.segments.length > 0) {
+      const segments = parsed.segments
+        .map((s: any) => ({
+          start: Number(s.start) || 0,
+          end: Number(s.end) || 0,
+          text: String(s.text || '').trim(),
+        }))
+        .filter((s: any) => s.text.length > 0);
+      
+      console.log(`Gemini YouTube fallback: Transcribed ${segments.length} segments`);
+      return segments;
+    }
+    
+    console.log('Gemini YouTube fallback: No valid segments in response');
+    return [];
+  } catch (e) {
+    console.error('Gemini YouTube fallback: Error:', e);
+    return [];
+  }
+}
+
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
 async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any): Promise<Array<{start: number, end: number, text: string}>> {
   try {
@@ -1576,8 +1655,9 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioUrl) {
       const invidiousInstances = [
         'https://inv.nadeko.net',
+        'https://invidious.f5.si',
         'https://invidious.nerdvpn.de',
-        'https://iv.datura.network',
+        'https://vid.puffyan.us',
       ];
       
       for (const instance of invidiousInstances) {
@@ -1619,7 +1699,12 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     }
 
     if (!audioFormat || !audioUrl) {
-      console.log('Audio fallback: No audio streams found from any source');
+      console.log('Audio fallback: No audio streams found from any source — trying direct Gemini YouTube transcription');
+      // Final fallback: Use Gemini to transcribe directly from YouTube URL (no audio download needed)
+      const geminiDirect = await transcribeViaGeminiYouTubeUrl(youtubeId, videoId, supabase);
+      if (geminiDirect && geminiDirect.length > 0) {
+        return geminiDirect;
+      }
       return [];
     }
 
