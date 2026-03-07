@@ -1540,23 +1540,6 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     console.error('Timedtext method failed:', e);
   }
 
-  // Method 4: Firecrawl scrape (extracts page text as transcript-like segments)
-  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
-  if (FIRECRAWL_API_KEY) {
-    try {
-      console.log('Method 4: Trying Firecrawl scrape for', youtubeId);
-      const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
-      if (firecrawlResult.length > 0) {
-        console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
-        return firecrawlResult;
-      }
-    } catch (e) {
-      console.error('Firecrawl method failed:', e);
-    }
-  } else {
-    console.log('Firecrawl not configured, skipping Method 4');
-  }
-
   console.log('All caption methods failed for', youtubeId);
   return [];
 }
