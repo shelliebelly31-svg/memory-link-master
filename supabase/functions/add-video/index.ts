@@ -1534,6 +1534,90 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
       }
     }
 
+    // Fallback: Try cobalt.tools API
+    if (!audioUrl) {
+      console.log('Audio fallback: Trying cobalt.tools API for', youtubeId);
+      try {
+        const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+          method: 'POST',
+          headers: {
+            'Accept': 'application/json',
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            url: `https://www.youtube.com/watch?v=${youtubeId}`,
+            downloadMode: 'audio',
+            audioFormat: 'mp3',
+          }),
+        });
+
+        if (cobaltResponse.ok) {
+          const cobaltData = await cobaltResponse.json();
+          console.log('Audio fallback: cobalt response status:', cobaltData.status);
+          
+          if (cobaltData.status === 'tunnel' || cobaltData.status === 'redirect') {
+            audioUrl = cobaltData.url;
+            audioFormat = { mimeType: 'audio/mpeg', bitrate: 128000 };
+            usedClient = 'cobalt.tools';
+            console.log('Audio fallback: cobalt.tools provided audio URL!');
+          } else if (cobaltData.status === 'error') {
+            console.log('Audio fallback: cobalt.tools error:', cobaltData.error?.code || cobaltData.text);
+          }
+        } else {
+          const errText = await cobaltResponse.text();
+          console.log(`Audio fallback: cobalt.tools returned ${cobaltResponse.status}:`, errText.slice(0, 200));
+        }
+      } catch (e) {
+        console.error('Audio fallback: cobalt.tools error:', e);
+      }
+    }
+
+    // Fallback: Try Invidious instances
+    if (!audioUrl) {
+      const invidiousInstances = [
+        'https://inv.nadeko.net',
+        'https://invidious.nerdvpn.de',
+        'https://iv.datura.network',
+      ];
+      
+      for (const instance of invidiousInstances) {
+        try {
+          console.log(`Audio fallback: Trying Invidious ${instance} for`, youtubeId);
+          const invResponse = await fetch(`${instance}/api/v1/videos/${youtubeId}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+          });
+          
+          if (!invResponse.ok) {
+            console.log(`Audio fallback: Invidious ${instance} returned ${invResponse.status}`);
+            await invResponse.text(); // consume body
+            continue;
+          }
+          
+          const invData = await invResponse.json();
+          const adaptiveFormats = invData?.adaptiveFormats || [];
+          const audioStreams = adaptiveFormats
+            .filter((f: any) => f.type?.startsWith('audio/'))
+            .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
+          
+          if (audioStreams.length === 0) {
+            console.log(`Audio fallback: Invidious ${instance} — no audio streams`);
+            continue;
+          }
+          
+          const best = audioStreams.find((s: any) => s.type?.includes('mp4a')) || audioStreams[0];
+          if (best?.url) {
+            audioUrl = best.url;
+            audioFormat = { mimeType: best.type?.split(';')[0] || 'audio/mp4', bitrate: best.bitrate };
+            usedClient = `Invidious(${instance})`;
+            console.log(`Audio fallback: Invidious found audio! (${best.type}, bitrate: ${best.bitrate})`);
+            break;
+          }
+        } catch (e) {
+          console.error(`Audio fallback: Invidious ${instance} error:`, e);
+        }
+      }
+    }
+
     if (!audioFormat || !audioUrl) {
       console.log('Audio fallback: No audio streams found from any source');
       return [];
