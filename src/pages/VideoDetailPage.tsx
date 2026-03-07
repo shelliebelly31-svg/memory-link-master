@@ -201,7 +201,15 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
 
   const handleStartRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      // CRITICAL: Disable echo cancellation so the mic captures the video's speaker audio
+      // instead of filtering it out. Also disable noise suppression to preserve speech clarity.
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          echoCancellation: false,
+          noiseSuppression: false,
+          autoGainControl: true,
+        },
+      });
       const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
       audioChunksRef.current = [];
       
