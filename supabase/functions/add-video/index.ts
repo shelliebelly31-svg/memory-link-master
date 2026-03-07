@@ -1540,8 +1540,85 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     console.error('Timedtext method failed:', e);
   }
 
+  // Method 4: Firecrawl scrape (extracts page text as transcript-like segments)
+  const FIRECRAWL_API_KEY = Deno.env.get('FIRECRAWL_API_KEY');
+  if (FIRECRAWL_API_KEY) {
+    try {
+      console.log('Method 4: Trying Firecrawl scrape for', youtubeId);
+      const firecrawlResult = await fetchContentViaFirecrawl(youtubeId, FIRECRAWL_API_KEY);
+      if (firecrawlResult.length > 0) {
+        console.log(`Firecrawl: Got ${firecrawlResult.length} segments`);
+        return firecrawlResult;
+      }
+    } catch (e) {
+      console.error('Firecrawl method failed:', e);
+    }
+  } else {
+    console.log('Firecrawl not configured, skipping Method 4');
+  }
+
   console.log('All caption methods failed for', youtubeId);
   return [];
+}
+
+// Method 4: Use Firecrawl to scrape YouTube page content
+async function fetchContentViaFirecrawl(youtubeId: string, apiKey: string): Promise<Array<{start: number, end: number, text: string}>> {
+  const videoUrl = `https://www.youtube.com/watch?v=${youtubeId}`;
+  
+  const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      url: videoUrl,
+      formats: ['markdown'],
+      onlyMainContent: true,
+    }),
+  });
+
+  if (!response.ok) {
+    console.error('Firecrawl API error:', response.status);
+    return [];
+  }
+
+  const data = await response.json();
+  const markdown = data?.data?.markdown || data?.markdown || '';
+  
+  if (!markdown || markdown.trim().length < 100) {
+    console.log('Firecrawl: Not enough content extracted');
+    return [];
+  }
+
+  // Parse the markdown content into transcript-like segments
+  // Filter out navigation, metadata lines — keep substantive paragraphs
+  const paragraphs = markdown
+    .split(/\n\n+/)
+    .map((p: string) => p.replace(/\n/g, ' ').trim())
+    .filter((p: string) => p.length > 20 && !p.startsWith('#') && !p.startsWith('[') && !p.startsWith('!'));
+
+  if (paragraphs.length === 0) return [];
+
+  const segments: Array<{start: number, end: number, text: string}> = [];
+  let currentTime = 0;
+  const avgSegmentDuration = 30;
+
+  for (const para of paragraphs) {
+    segments.push({
+      start: currentTime,
+      end: currentTime + avgSegmentDuration,
+      text: para,
+    });
+    currentTime += avgSegmentDuration;
+  }
+
+  // Update end times to be contiguous
+  for (let i = 0; i < segments.length - 1; i++) {
+    segments[i].end = segments[i + 1].start;
+  }
+
+  return segments;
 }
 
 // Method 1: Use YouTube's Innertube API
