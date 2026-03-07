@@ -2154,7 +2154,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioFormat || !audioUrl) {
       console.log('Audio fallback: No audio streams found from any source — trying direct Gemini YouTube transcription');
       // Final fallback: Use Gemini to transcribe directly from YouTube URL (no audio download needed)
-      const geminiDirect = await transcribeViaGeminiYouTubeUrl(youtubeId, videoId, supabase);
+      const geminiDirect = await transcribeViaGeminiYouTubeUrl(youtubeId, videoId, supabase, videoTitle);
       if (geminiDirect && geminiDirect.length > 0) {
         return geminiDirect;
       }
