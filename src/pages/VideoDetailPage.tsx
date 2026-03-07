@@ -51,7 +51,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const [prefillEndTimestamp, setPrefillEndTimestamp] = useState<number | undefined>();
   const [milestoneCount, setMilestoneCount] = useState<number | null>(null);
   const [isResegmenting, setIsResegmenting] = useState(false);
-  const [isRefetchingCaptions, setIsRefetchingCaptions] = useState(false);
+  
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [isReprocessing, setIsReprocessing] = useState(false);
