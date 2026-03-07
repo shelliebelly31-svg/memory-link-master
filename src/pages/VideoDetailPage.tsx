@@ -421,14 +421,24 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           )}
         </div>
 
-        {/* Video Player */}
-        {video.youtube_id && !video.youtube_id.startsWith('manual-') && (
+        {/* Video Player - only for YouTube videos */}
+        {video.youtube_id && !video.youtube_id.startsWith('manual-') && !video.youtube_id.startsWith('generic-') && (
           <div className="px-4 pt-4">
             <YouTubePlayer 
               videoId={video.youtube_id} 
               onTimeRef={(getTime) => { playerTimeRef.current = getTime; }}
               onPlayerControls={(controls) => { playerControlsRef.current = controls; }}
             />
+          </div>
+        )}
+
+        {/* Source badge for non-YouTube content */}
+        {video.youtube_id?.startsWith('generic-') && (
+          <div className="px-4 pt-4">
+            <div className="bg-muted/50 border border-border rounded-lg p-3 flex items-center gap-2">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="text-sm text-muted-foreground truncate">{video.youtube_url}</span>
+            </div>
           </div>
         )}
 
