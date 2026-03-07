@@ -1206,6 +1206,7 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
         })
         .eq('id', videoId);
 
+      videoTitle = metadata.title;
       console.log('Metadata fetched:', metadata.title);
     }
 
