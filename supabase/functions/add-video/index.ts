@@ -1655,8 +1655,9 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioUrl) {
       const invidiousInstances = [
         'https://inv.nadeko.net',
+        'https://invidious.f5.si',
         'https://invidious.nerdvpn.de',
-        'https://iv.datura.network',
+        'https://vid.puffyan.us',
       ];
       
       for (const instance of invidiousInstances) {
