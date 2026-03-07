@@ -115,7 +115,7 @@ export function TranscriptView({
   });
   const containerRef = useRef<HTMLDivElement>(null);
   const transcriptContentRef = useRef<HTMLDivElement>(null);
-  const audioInputRef = useRef<HTMLInputElement>(null);
+  
   
   // Track active selection for disabling pointer events on sticky elements
   const isSelectionActive = useSelectionActive(transcriptContentRef);

@@ -513,7 +513,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
                   onPlayVideo={() => playerControlsRef.current?.play()}
                    onResegment={handleResegment}
                    isResegmenting={isResegmenting}
-                   onFixTimestampsViaAudio={handleFixTimestampsViaAudio}
+                   
                    isFixingTimestamps={isFixingTimestamps}
                    onStartRecording={handleStartRecording}
                    onStopRecording={handleStopRecording}
