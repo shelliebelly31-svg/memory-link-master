@@ -52,7 +52,7 @@ export default function HomePage({ onLogout }: HomePageProps) {
   const [editReminder, setEditReminder] = useState<CombinedReminder | null>(null);
   
   // Delete undo state
-  const [pendingDeletes, setPendingDeletes] = useState<Map<string, { reminder: CombinedReminder; index: number; timeoutId: NodeJS.Timeout }>>(new Map());
+  const [pendingDeletes, setPendingDeletes] = useState<Map<string, { reminder: CombinedReminder; index: number; timeoutId: ReturnType<typeof setTimeout> }>>(new Map());
 
   const { data: rememberItems = [], isLoading: loadingReminders } = useAllRemindersCombined();
   const { data: allTasks = [], isLoading: loadingTasks } = useAllTasks();
