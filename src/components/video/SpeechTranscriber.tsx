@@ -73,7 +73,10 @@ export function SpeechTranscriber({
   // Highlight active word
   const flatWords = wordSegments.flat();
   useEffect(() => {
-    const idx = flatWords.findLastIndex((w) => w.startTime <= currentTime);
+    let idx = -1;
+    for (let i = flatWords.length - 1; i >= 0; i--) {
+      if (flatWords[i].startTime <= currentTime) { idx = i; break; }
+    }
     setActiveWordIdx(idx);
   }, [currentTime, flatWords]);
 
