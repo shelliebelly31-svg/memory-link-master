@@ -2116,10 +2116,10 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     // Fallback: Try Invidious instances
     if (!audioUrl) {
       const invidiousInstances = [
-        'https://inv.nadeko.net',
-        'https://invidious.f5.si',
-        'https://invidious.nerdvpn.de',
-        'https://vid.puffyan.us',
+        'https://invidious.privacyredirect.com',
+        'https://iv.datura.network',
+        'https://invidious.perennialte.ch',
+        'https://yt.cdaut.de',
       ];
       
       for (const instance of invidiousInstances) {
