@@ -450,7 +450,21 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           </div>
         )}
 
-        {/* Source badge for non-YouTube content */}
+        {/* Speech Transcriber Panel */}
+        {video.youtube_id && !video.youtube_id.startsWith('manual-') && !video.youtube_id.startsWith('generic-') && (
+          <div className="px-4">
+            <SpeechTranscriber
+              isOpen={speechTranscriberOpen}
+              onClose={() => setSpeechTranscriberOpen(false)}
+              onTranscriptionComplete={handleSpeechTranscriptionComplete}
+              onPlayVideo={() => playerControlsRef.current?.play()}
+              onPauseVideo={() => playerControlsRef.current?.pause()}
+              onSeekTo={(s) => playerControlsRef.current?.seekTo(s)}
+              getCurrentTime={playerTimeRef.current || undefined}
+            />
+          </div>
+        )}
+
         {video.youtube_id?.startsWith('generic-') && (
           <div className="px-4 pt-4">
             <div className="bg-muted/50 border border-border rounded-lg p-3 flex items-center gap-2">
