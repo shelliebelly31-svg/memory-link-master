@@ -1,4 +1,5 @@
 import { useState, useMemo, useCallback, useRef } from 'react';
+import { SpeechTranscriber } from '@/components/video/SpeechTranscriber';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
@@ -55,6 +56,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [speechTranscriberOpen, setSpeechTranscriberOpen] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
@@ -199,58 +201,64 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
     }
   }, [id, queryClient, toast]);
 
-  const handleStartRecording = useCallback(async () => {
-    try {
-      // CRITICAL: Disable echo cancellation so the mic captures the video's speaker audio
-      // instead of filtering it out. Also disable noise suppression to preserve speech clarity.
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          autoGainControl: true,
-        },
-      });
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
-      audioChunksRef.current = [];
-      
-      mediaRecorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
-      
-      mediaRecorder.onstop = async () => {
-        stream.getTracks().forEach(t => t.stop());
-        const blob = new Blob(audioChunksRef.current, { type: 'audio/webm' });
-        if (blob.size > 0) {
-          const file = new File([blob], 'recorded-audio.webm', { type: 'audio/webm' });
-          await handleFixTimestampsViaAudio(file);
-        }
-      };
-      
-      mediaRecorder.start(1000);
-      mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
-      
-      // Auto-play the video
-      playerControlsRef.current?.play();
-      
-      toast({ title: 'Recording started', description: 'Play the video — your mic is capturing the audio' });
-    } catch (err: any) {
-      toast({
-        title: 'Microphone access denied',
-        description: 'Please allow microphone access to record video audio',
-        variant: 'destructive',
-      });
-    }
-  }, [handleFixTimestampsViaAudio, toast]);
+  const handleStartRecording = useCallback(() => {
+    setSpeechTranscriberOpen(true);
+  }, []);
 
   const handleStopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
-      mediaRecorderRef.current = null;
-    }
+    setSpeechTranscriberOpen(false);
     setIsRecording(false);
-    playerControlsRef.current?.pause();
   }, []);
+
+  const handleSpeechTranscriptionComplete = useCallback(async (
+    newSegments: { text: string; start_seconds: number; end_seconds: number }[]
+  ) => {
+    if (!id) return;
+    setIsFixingTimestamps(true);
+    try {
+      // Delete existing segments
+      const { error: deleteError } = await supabase
+        .from('transcript_segments')
+        .delete()
+        .eq('video_id', id);
+      if (deleteError) throw deleteError;
+
+      // Insert new segments
+      const { error: insertError } = await supabase
+        .from('transcript_segments')
+        .insert(
+          newSegments.map(s => ({
+            video_id: id,
+            text: s.text,
+            start_seconds: s.start_seconds,
+            end_seconds: s.end_seconds,
+          }))
+        );
+      if (insertError) throw insertError;
+
+      // Update video transcript_source
+      await supabase
+        .from('videos')
+        .update({ transcript_source: 'speech_recognition', status: 'ready' as const })
+        .eq('id', id);
+
+      toast({
+        title: 'Transcript saved',
+        description: `Created ${newSegments.length} segments from live transcription`,
+      });
+      queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] });
+      queryClient.invalidateQueries({ queryKey: ['video', id] });
+      setSpeechTranscriberOpen(false);
+    } catch (err: any) {
+      toast({
+        title: 'Save failed',
+        description: err.message || 'Something went wrong',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsFixingTimestamps(false);
+    }
+  }, [id, queryClient, toast]);
 
 
   // Loading state
@@ -442,7 +450,21 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
           </div>
         )}
 
-        {/* Source badge for non-YouTube content */}
+        {/* Speech Transcriber Panel */}
+        {video.youtube_id && !video.youtube_id.startsWith('manual-') && !video.youtube_id.startsWith('generic-') && (
+          <div className="px-4">
+            <SpeechTranscriber
+              isOpen={speechTranscriberOpen}
+              onClose={() => setSpeechTranscriberOpen(false)}
+              onTranscriptionComplete={handleSpeechTranscriptionComplete}
+              onPlayVideo={() => playerControlsRef.current?.play()}
+              onPauseVideo={() => playerControlsRef.current?.pause()}
+              onSeekTo={(s) => playerControlsRef.current?.seekTo(s)}
+              getCurrentTime={playerTimeRef.current || undefined}
+            />
+          </div>
+        )}
+
         {video.youtube_id?.startsWith('generic-') && (
           <div className="px-4 pt-4">
             <div className="bg-muted/50 border border-border rounded-lg p-3 flex items-center gap-2">
