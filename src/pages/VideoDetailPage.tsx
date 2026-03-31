@@ -431,7 +431,33 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
 
   return (
     <PageLayout onLogout={onLogout}>
-      <div className="flex flex-col">
+      <div
+        ref={scrollRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex flex-col relative"
+        style={{ overscrollBehavior: 'contain' }}
+      >
+        {/* Pull-to-refresh indicator */}
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all duration-200"
+          style={{ height: pullDistance > 0 ? pullDistance : 0 }}
+        >
+          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+            <RefreshCw
+              className={`h-5 w-5 transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
+              style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 3}deg)` }}
+            />
+            <span className="text-xs">
+              {isRefreshing
+                ? 'Refreshing...'
+                : pullDistance >= PULL_THRESHOLD
+                  ? 'Release to refresh'
+                  : 'Pull to refresh'}
+            </span>
+          </div>
+        </div>
         {/* Debug Panel */}
         {showDebug && (
           <div className="bg-muted/50 border-b border-border px-4 py-2 text-xs font-mono">
