@@ -2079,7 +2079,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioUrl) {
       console.log('Audio fallback: Trying cobalt.tools API for', youtubeId);
       try {
-        const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
@@ -2087,8 +2087,8 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
           },
           body: JSON.stringify({
             url: `https://www.youtube.com/watch?v=${youtubeId}`,
-            downloadMode: 'audio',
-            audioFormat: 'mp3',
+            isAudioOnly: true,
+            aFormat: 'mp3',
           }),
         });
 
