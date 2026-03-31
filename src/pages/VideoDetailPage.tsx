@@ -88,7 +88,43 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const retryVideoMutation = useRetryVideo();
   const queryClient = useQueryClient();
 
-  // Callback to refresh highlights after AI suggestions update
+  // Pull-to-refresh handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    if (scrollRef.current && scrollRef.current.scrollTop > 0) return;
+    const diff = e.touches[0].clientY - touchStartY.current;
+    if (diff > 0) {
+      setPullDistance(Math.min(diff * 0.5, 120));
+    }
+  }, [isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(PULL_THRESHOLD);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['video', id] }),
+        queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] }),
+        queryClient.invalidateQueries({ queryKey: ['highlights', id] }),
+        queryClient.invalidateQueries({ queryKey: ['remember_items', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', id] }),
+        queryClient.invalidateQueries({ queryKey: ['quiz_items', id] }),
+      ]);
+
+      toast({ title: 'Refreshed', description: 'Video data updated.' });
+      setIsRefreshing(false);
+    }
+    setPullDistance(0);
+  }, [pullDistance, isRefreshing, id, queryClient, toast]);
+
+
   const handleHighlightsUpdated = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['highlights', id] });
     queryClient.invalidateQueries({ queryKey: ['video', id] });
