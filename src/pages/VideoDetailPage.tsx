@@ -56,6 +56,7 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   
   const [isFixingTimestamps, setIsFixingTimestamps] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
+  const [speechTranscriberOpen, setSpeechTranscriberOpen] = useState(false);
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
