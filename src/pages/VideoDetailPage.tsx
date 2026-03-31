@@ -3,7 +3,7 @@ import { SpeechTranscriber } from '@/components/video/SpeechTranscriber';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus, RotateCcw, RefreshCw } from 'lucide-react';
 import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { YouTubePlayer } from '@/components/video/YouTubePlayer';
