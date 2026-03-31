@@ -268,8 +268,8 @@ export function SpeechTranscriber({
 
       {/* Status badge */}
       {status === 'transcribing' && (
-        <div className="inline-flex items-center gap-2 bg-green-500/10 text-green-700 dark:text-green-400 rounded-full px-3 py-1 text-xs font-semibold">
-          <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+      <div className="inline-flex items-center gap-2 bg-primary/10 text-primary rounded-full px-3 py-1 text-xs font-semibold">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
           Transcribing… {flatWords.length} words
         </div>
       )}
