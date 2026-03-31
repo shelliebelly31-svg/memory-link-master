@@ -2029,9 +2029,9 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     // Fallback: Try Piped API instances if Innertube failed
     if (!audioUrl) {
       const pipedInstances = [
-        'https://pipedapi.kavin.rocks',
-        'https://pipedapi.adminforge.de',
-        'https://pipedapi.in.projectsegfau.lt',
+        'https://pipedapi.tokhmi.xyz',
+        'https://piped-api.garudalinux.org',
+        'https://pipedapi.leptons.xyz',
       ];
 
       for (const instance of pipedInstances) {
