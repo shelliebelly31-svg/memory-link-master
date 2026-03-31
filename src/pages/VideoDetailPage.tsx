@@ -3,7 +3,7 @@ import { SpeechTranscriber } from '@/components/video/SpeechTranscriber';
 import { supabase } from '@/integrations/supabase/client';
 import { useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate, Link } from 'react-router-dom';
-import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus, RotateCcw } from 'lucide-react';
+import { ArrowLeft, FileText, Brain, Trophy, CheckSquare, AlertCircle, Plus, RotateCcw, RefreshCw } from 'lucide-react';
 import { MilestoneDialog } from '@/components/todo/MilestoneDialog';
 import { PageLayout } from '@/components/layout/PageLayout';
 import { YouTubePlayer } from '@/components/video/YouTubePlayer';
@@ -60,6 +60,13 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+
+  // Pull-to-refresh state
+  const [pullDistance, setPullDistance] = useState(0);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const touchStartY = useRef(0);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const PULL_THRESHOLD = 80;
   
   // Ref for getting current playback time
   const playerTimeRef = useRef<(() => number | null) | null>(null);
@@ -81,7 +88,43 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
   const retryVideoMutation = useRetryVideo();
   const queryClient = useQueryClient();
 
-  // Callback to refresh highlights after AI suggestions update
+  // Pull-to-refresh handlers
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    if (scrollRef.current && scrollRef.current.scrollTop === 0) {
+      touchStartY.current = e.touches[0].clientY;
+    }
+  }, []);
+
+  const handleTouchMove = useCallback((e: React.TouchEvent) => {
+    if (isRefreshing) return;
+    if (scrollRef.current && scrollRef.current.scrollTop > 0) return;
+    const diff = e.touches[0].clientY - touchStartY.current;
+    if (diff > 0) {
+      setPullDistance(Math.min(diff * 0.5, 120));
+    }
+  }, [isRefreshing]);
+
+  const handleTouchEnd = useCallback(async () => {
+    if (pullDistance >= PULL_THRESHOLD && !isRefreshing) {
+      setIsRefreshing(true);
+      setPullDistance(PULL_THRESHOLD);
+
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['video', id] }),
+        queryClient.invalidateQueries({ queryKey: ['transcript_segments', id] }),
+        queryClient.invalidateQueries({ queryKey: ['highlights', id] }),
+        queryClient.invalidateQueries({ queryKey: ['remember_items', id] }),
+        queryClient.invalidateQueries({ queryKey: ['tasks', id] }),
+        queryClient.invalidateQueries({ queryKey: ['quiz_items', id] }),
+      ]);
+
+      toast({ title: 'Refreshed', description: 'Video data updated.' });
+      setIsRefreshing(false);
+    }
+    setPullDistance(0);
+  }, [pullDistance, isRefreshing, id, queryClient, toast]);
+
+
   const handleHighlightsUpdated = useCallback(() => {
     queryClient.invalidateQueries({ queryKey: ['highlights', id] });
     queryClient.invalidateQueries({ queryKey: ['video', id] });
@@ -389,7 +432,33 @@ export default function VideoDetailPage({ onLogout }: VideoDetailPageProps) {
 
   return (
     <PageLayout onLogout={onLogout}>
-      <div className="flex flex-col">
+      <div
+        ref={scrollRef}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
+        className="flex flex-col relative"
+        style={{ overscrollBehavior: 'contain' }}
+      >
+        {/* Pull-to-refresh indicator */}
+        <div
+          className="flex items-center justify-center overflow-hidden transition-all duration-200"
+          style={{ height: pullDistance > 0 ? pullDistance : 0 }}
+        >
+          <div className="flex flex-col items-center gap-1 text-muted-foreground">
+            <RefreshCw
+              className={`h-5 w-5 transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
+              style={{ transform: isRefreshing ? undefined : `rotate(${pullDistance * 3}deg)` }}
+            />
+            <span className="text-xs">
+              {isRefreshing
+                ? 'Refreshing...'
+                : pullDistance >= PULL_THRESHOLD
+                  ? 'Release to refresh'
+                  : 'Pull to refresh'}
+            </span>
+          </div>
+        </div>
         {/* Debug Panel */}
         {showDebug && (
           <div className="bg-muted/50 border-b border-border px-4 py-2 text-xs font-mono">
