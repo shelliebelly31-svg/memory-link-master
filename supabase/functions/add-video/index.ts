@@ -2029,9 +2029,9 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     // Fallback: Try Piped API instances if Innertube failed
     if (!audioUrl) {
       const pipedInstances = [
-        'https://pipedapi.kavin.rocks',
-        'https://pipedapi.adminforge.de',
-        'https://pipedapi.in.projectsegfau.lt',
+        'https://pipedapi.tokhmi.xyz',
+        'https://piped-api.garudalinux.org',
+        'https://pipedapi.leptons.xyz',
       ];
 
       for (const instance of pipedInstances) {
@@ -2079,7 +2079,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     if (!audioUrl) {
       console.log('Audio fallback: Trying cobalt.tools API for', youtubeId);
       try {
-        const cobaltResponse = await fetch('https://api.cobalt.tools/', {
+        const cobaltResponse = await fetch('https://api.cobalt.tools/api/json', {
           method: 'POST',
           headers: {
             'Accept': 'application/json',
@@ -2087,8 +2087,8 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
           },
           body: JSON.stringify({
             url: `https://www.youtube.com/watch?v=${youtubeId}`,
-            downloadMode: 'audio',
-            audioFormat: 'mp3',
+            isAudioOnly: true,
+            aFormat: 'mp3',
           }),
         });
 
@@ -2116,10 +2116,10 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
     // Fallback: Try Invidious instances
     if (!audioUrl) {
       const invidiousInstances = [
-        'https://inv.nadeko.net',
-        'https://invidious.f5.si',
-        'https://invidious.nerdvpn.de',
-        'https://vid.puffyan.us',
+        'https://invidious.privacyredirect.com',
+        'https://iv.datura.network',
+        'https://invidious.perennialte.ch',
+        'https://yt.cdaut.de',
       ];
       
       for (const instance of invidiousInstances) {
