@@ -346,7 +346,7 @@ export function SpeechTranscriber({
       )}
 
       {/* How it works */}
-      <div className="bg-blue-50 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800 rounded-lg p-3 text-xs text-blue-700 dark:text-blue-300 leading-relaxed">
+      <div className="bg-muted/50 border border-border rounded-lg p-3 text-xs text-muted-foreground leading-relaxed">
         <strong>How it works:</strong> Click <em>Start Transcribing</em> — the video plays and your browser
         listens via the Web Speech API. Words appear in real-time with timestamps. When done, click <em>Save to Transcript</em> to
         replace the current transcript with this verbatim capture.
