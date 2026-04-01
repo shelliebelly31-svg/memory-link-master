@@ -1953,7 +1953,7 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
       try {
         console.log('Audio fallback: Trying RapidAPI transcript for', youtubeId);
         const rapidRes = await fetch(
-          `https://youtube-transcript3.p.rapidapi.com/api/transcript?videoId=${youtubeId}`,
+          `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=https://www.youtube.com/watch?v=${youtubeId}&flat=true`,
           {
             method: 'GET',
             headers: {
