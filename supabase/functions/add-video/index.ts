@@ -1223,65 +1223,16 @@ async function processVideoFromLink(videoId: string, youtubeId: string, supabase
 
       let transcript = await fetchYouTubeCaptions(youtubeId);
       let transcriptSource = 'captions';
-      
-      // Quality check: evaluate if the fetched transcript is actually good
-      if (transcript && transcript.length > 0) {
-        const quality = evaluateTranscriptQuality(transcript, videoDurationSeconds);
-        if (!quality.isGood) {
-          console.log(`Caption quality check FAILED: ${quality.reason}. Proceeding to audio transcription...`);
-          // Store the weak captions as fallback but try audio first
-          const weakCaptions = transcript;
-          
-          await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
-          const audioTranscript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
-          
-          if (audioTranscript && audioTranscript.length > 0) {
-            const audioQuality = evaluateTranscriptQuality(audioTranscript, videoDurationSeconds);
-            if (audioQuality.isGood) {
-              console.log('Audio transcription succeeded and passed quality check — using it over weak captions');
-              transcript = audioTranscript;
-              transcriptSource = 'audio_transcription';
-            } else {
-              // Audio also weak — pick whichever has more content
-              const captionWords = weakCaptions.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
-              const audioWords = audioTranscript.reduce((sum, s) => sum + s.text.split(/\s+/).length, 0);
-              if (audioWords > captionWords) {
-                console.log('Both weak, but audio has more content — using audio');
-                transcript = audioTranscript;
-                transcriptSource = 'audio_transcription';
-              } else {
-                console.log('Both weak, keeping original captions as they have more content');
-                transcriptSource = 'captions';
-              }
-            }
-          } else {
-            console.log('Audio transcription failed or empty — weak captions are not usable, setting needs_attention');
-            await supabase
-              .from('videos')
-              .update({
-                captions_missing: true,
-                status: 'needs_attention',
-                failed_step: 'captions',
-                processing_step: 'failed',
-                error_message: 'Captions were low quality (page text/comments, not spoken dialogue) and audio transcription failed. Please add the transcript manually.',
-              })
-              .eq('id', videoId);
-            return;
-          }
-        } else {
-          console.log('Caption quality check PASSED — using fetched captions');
-          transcriptSource = 'captions';
-        }
-      }
-      
-      // If captions were empty/null, try audio transcription
-      if (!transcript || transcript.length === 0) {
-        console.log('All caption methods failed, trying audio download + transcription...');
+
+      // Use captions directly if we got any — they come from YouTube's own API
+      if (transcript && transcript.length >= 3) {
+        console.log(`Using captions directly: ${transcript.length} segments`);
+        transcriptSource = 'captions';
+      } else {
+        console.log('No captions found, trying audio transcription...');
         await supabase.from('videos').update({ processing_step: 'downloading_audio' }).eq('id', videoId);
         transcript = await downloadAndTranscribeAudio(youtubeId, videoId, supabase, videoTitle);
-        if (transcript && transcript.length > 0) {
-          transcriptSource = 'audio_transcription';
-        }
+        if (transcript && transcript.length > 0) transcriptSource = 'audio_transcription';
       }
 
       // Last resort: Try Firecrawl page scrape (page text, not spoken word)
