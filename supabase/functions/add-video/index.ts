@@ -1953,23 +1953,23 @@ async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, s
       try {
         console.log('Audio fallback: Trying RapidAPI transcript for', youtubeId);
         const rapidRes = await fetch(
-          `https://youtube-transcript3.p.rapidapi.com/api/transcript-with-url?url=https://www.youtube.com/watch?v=${youtubeId}&flat=true`,
+          `https://youtube-transcriptor.p.rapidapi.com/transcript?video_id=${youtubeId}&lang=en`,
           {
             method: 'GET',
             headers: {
               'x-rapidapi-key': RAPIDAPI_KEY,
-              'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com',
+              'x-rapidapi-host': 'youtube-transcriptor.p.rapidapi.com',
             },
           }
         );
         if (rapidRes.ok) {
           const rapidData = await rapidRes.json();
-          const items = rapidData?.transcript ?? rapidData ?? [];
+          const items = rapidData?.[0]?.transcription ?? [];
           if (Array.isArray(items) && items.length > 0) {
             const segments = items.map((item: any) => ({
-              start: Number(item.offset ?? item.start ?? 0) / 1000,
-              end: (Number(item.offset ?? item.start ?? 0) + Number(item.duration ?? 5000)) / 1000,
-              text: String(item.text ?? item.subtitle ?? '').trim(),
+              start: Number(item.offset ?? 0) / 1000,
+              end: (Number(item.offset ?? 0) + Number(item.duration ?? 5000)) / 1000,
+              text: String(item.subtitle ?? '').trim(),
             })).filter((s: any) => s.text.length > 0);
             if (segments.length > 0) {
               console.log(`Audio fallback: RapidAPI got ${segments.length} segments`);
