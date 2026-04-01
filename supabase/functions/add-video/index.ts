@@ -1947,6 +1947,43 @@ Based on the video title and creator, generate detailed, topically accurate cont
 // Method 5: Download YouTube audio via Innertube streaming URLs and transcribe
 async function downloadAndTranscribeAudio(youtubeId: string, videoId?: string, supabase?: any, videoTitle?: string): Promise<Array<{start: number, end: number, text: string}>> {
   try {
+    // Method 0: RapidAPI YouTube Transcript (most reliable)
+    const RAPIDAPI_KEY = Deno.env.get('RAPIDAPI_KEY');
+    if (RAPIDAPI_KEY) {
+      try {
+        console.log('Audio fallback: Trying RapidAPI transcript for', youtubeId);
+        const rapidRes = await fetch(
+          `https://youtube-transcript3.p.rapidapi.com/api/transcript?videoId=${youtubeId}`,
+          {
+            method: 'GET',
+            headers: {
+              'x-rapidapi-key': RAPIDAPI_KEY,
+              'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com',
+            },
+          }
+        );
+        if (rapidRes.ok) {
+          const rapidData = await rapidRes.json();
+          const items = rapidData?.transcript ?? rapidData ?? [];
+          if (Array.isArray(items) && items.length > 0) {
+            const segments = items.map((item: any) => ({
+              start: Number(item.offset ?? item.start ?? 0) / 1000,
+              end: (Number(item.offset ?? item.start ?? 0) + Number(item.duration ?? 5000)) / 1000,
+              text: String(item.text ?? item.subtitle ?? '').trim(),
+            })).filter((s: any) => s.text.length > 0);
+            if (segments.length > 0) {
+              console.log(`Audio fallback: RapidAPI got ${segments.length} segments`);
+              return segments;
+            }
+          }
+        } else {
+          console.log('Audio fallback: RapidAPI returned', rapidRes.status);
+        }
+      } catch (e) {
+        console.error('Audio fallback: RapidAPI error:', e);
+      }
+    }
+
     // Step 1: Try multiple Innertube clients to find audio streams
     // WEB client often blocks direct URLs; ANDROID/IOS clients expose them more reliably
     const clientConfigs = [
