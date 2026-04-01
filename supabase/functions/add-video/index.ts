@@ -1531,6 +1531,35 @@ async function fetchVideoMetadata(youtubeId: string): Promise<{
 async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: number, end: number, text: string}>> {
   // Try multiple methods in order of reliability
   
+  // Method 0: Direct YouTube timedtext API with tracking params stripped
+  try {
+    console.log('Method 0: Trying direct YouTube caption API for', youtubeId);
+    const langs = ['en', 'en-US', 'en-GB', 'a.en'];
+    for (const lang of langs) {
+      const captionUrl = `https://www.youtube.com/api/timedtext?lang=${lang}&v=${youtubeId}&fmt=json3&xorb=2&xobt=3&xovt=3`;
+      const res = await fetch(captionUrl, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const events = data?.events ?? [];
+      const segments = events
+        .filter((e: any) => e.segs && e.tStartMs !== undefined)
+        .map((e: any) => ({
+          start: e.tStartMs / 1000,
+          end: (e.tStartMs + (e.dDurationMs ?? 3000)) / 1000,
+          text: e.segs.map((s: any) => s.utf8 ?? '').join('').replace(/\n/g, ' ').trim(),
+        }))
+        .filter((s: any) => s.text.length > 0 && s.text !== ' ');
+      if (segments.length > 0) {
+        console.log(`Method 0: Direct caption API got ${segments.length} segments for lang=${lang}`);
+        return segments;
+      }
+    }
+  } catch (e) {
+    console.error('Method 0: Direct caption error:', e);
+  }
+
   // Method 0: RapidAPI YouTube Transcript
   const RAPIDAPI_KEY = Deno.env.get('RAPIDAPI_KEY');
   if (RAPIDAPI_KEY) {
