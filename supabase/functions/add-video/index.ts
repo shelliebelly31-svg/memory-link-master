@@ -1537,28 +1537,31 @@ async function fetchYouTubeCaptions(youtubeId: string): Promise<Array<{start: nu
     try {
       console.log('Method 0: Trying RapidAPI YouTube Transcript for', youtubeId);
       const rapidRes = await fetch(
-        `https://youtube-transcriptor.p.rapidapi.com/transcript?video_id=${youtubeId}&lang=en`,
+        `https://youtube-transcript3.p.rapidapi.com/api/transcript?videoId=${youtubeId}`,
         {
+          method: 'GET',
           headers: {
             'x-rapidapi-key': RAPIDAPI_KEY,
-            'x-rapidapi-host': 'youtube-transcriptor.p.rapidapi.com',
+            'x-rapidapi-host': 'youtube-transcript3.p.rapidapi.com',
           },
         }
       );
       if (rapidRes.ok) {
         const rapidData = await rapidRes.json();
-        const items = rapidData?.[0]?.transcription ?? rapidData?.transcription ?? [];
-        if (items.length > 0) {
+        const items = rapidData?.transcript ?? rapidData ?? [];
+        if (Array.isArray(items) && items.length > 0) {
           const segments = items.map((item: any) => ({
             start: Number(item.offset ?? item.start ?? 0) / 1000,
             end: (Number(item.offset ?? item.start ?? 0) + Number(item.duration ?? 5000)) / 1000,
-            text: String(item.subtitle ?? item.text ?? '').trim(),
+            text: String(item.text ?? item.subtitle ?? '').trim(),
           })).filter((s: any) => s.text.length > 0);
           if (segments.length > 0) {
             console.log(`Method 0: RapidAPI got ${segments.length} segments`);
             return segments;
           }
         }
+      } else {
+        console.log('Method 0: RapidAPI returned', rapidRes.status);
       }
     } catch (e) {
       console.error('Method 0: RapidAPI error:', e);
