@@ -1084,17 +1084,15 @@ function evaluateTranscriptQuality(segments: Array<{start: number, end: number, 
     return { isGood: false, reason: `${largeGaps} large timestamp gaps — missing spoken continuity` };
   }
 
-  // Check 5: All timestamps are 0 or synthetic (30s intervals)
+  // Check 5: All timestamps synthetic (30s intervals) + page text indicators
   const allSyntheticTimestamps = segments.every((s, i) => s.start === i * 30);
   if (allSyntheticTimestamps && segments.length > 2) {
-    // Check if content looks like page text vs speech
     const fullText = segments.map(s => s.text).join(' ').toLowerCase();
     const pageIndicators = ['subscribe', 'click here', 'copyright', 'privacy policy', 'terms of service', 'all rights reserved', 'sign in', 'sign up', 'cookies'];
     const pageIndicatorCount = pageIndicators.filter(ind => fullText.includes(ind)).length;
     if (pageIndicatorCount >= 2) {
       return { isGood: false, reason: 'Content appears to be page text, not spoken dialogue' };
     }
-    return { isGood: false, reason: 'Synthetic timestamps detected — likely scraped page text, not real captions' };
   }
 
   // Check 6: If we know the video duration, check coverage
