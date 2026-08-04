@@ -13,9 +13,23 @@ import TodoPage from "./pages/TodoPage";
 import VideoDetailPage from "./pages/VideoDetailPage";
 import AddTranscriptPage from "./pages/AddTranscriptPage";
 import SharedQuizPage from "./pages/SharedQuizPage";
+import OAuthConsent from "./pages/OAuthConsent";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
+
+function isSafeRelativePath(path: string | null): path is string {
+  return !!path && path.startsWith("/") && !path.startsWith("//");
+}
+
+function PostLoginRedirect() {
+  const next = new URLSearchParams(window.location.search).get("next");
+  if (isSafeRelativePath(next)) {
+    window.location.replace(next);
+    return null;
+  }
+  return <Navigate to="/home" replace />;
+}
 
 function AppRoutes() {
   const { user, loading, signIn, signUp, signOut } = useAuth();
@@ -37,6 +51,7 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
         <Route path="/quiz/:token" element={<SharedQuizPage />} />
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -44,17 +59,19 @@ function AppRoutes() {
 
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/home" replace />} />
+      <Route path="/" element={<PostLoginRedirect />} />
       <Route path="/home" element={<HomePage onLogout={signOut} />} />
       <Route path="/library" element={<LibraryPage onLogout={signOut} />} />
       <Route path="/todo" element={<TodoPage onLogout={signOut} />} />
       <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
       <Route path="/video/:id/add-transcript" element={<AddTranscriptPage onLogout={signOut} />} />
       <Route path="/quiz/:token" element={<SharedQuizPage />} />
+      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
 }
+
 
 function SplashGate({ children }: { children: React.ReactNode }) {
   const [showSplash, setShowSplash] = useState(() => {
