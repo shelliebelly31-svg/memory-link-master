@@ -19,6 +19,11 @@ import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
 
+// Preview-only: skip the login screen while developing. Never active in the
+// published build, so real auth still applies for published apps.
+const BYPASS_AUTH = import.meta.env.DEV;
+
+
 function isSafeRelativePath(path: string | null): path is string {
   return !!path && path.startsWith("/") && !path.startsWith("//");
 }
@@ -47,7 +52,7 @@ function AppRoutes() {
     }
   };
 
-  if (!user) {
+  if (!user && !BYPASS_AUTH) {
     return (
       <Routes>
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
