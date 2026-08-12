@@ -14,6 +14,7 @@ import VideoDetailPage from "./pages/VideoDetailPage";
 import AddTranscriptPage from "./pages/AddTranscriptPage";
 import SharedQuizPage from "./pages/SharedQuizPage";
 import OAuthConsent from "./pages/OAuthConsent";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -51,7 +52,9 @@ function AppRoutes() {
       <Routes>
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
         <Route path="/quiz/:token" element={<SharedQuizPage />} />
-        <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+        <Route path="/reset-password" element={<ResetPasswordPage />} />
+      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
@@ -66,6 +69,7 @@ function AppRoutes() {
       <Route path="/video/:id" element={<VideoDetailPage onLogout={signOut} />} />
       <Route path="/video/:id/add-transcript" element={<AddTranscriptPage onLogout={signOut} />} />
       <Route path="/quiz/:token" element={<SharedQuizPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
       <Route path="*" element={<NotFound />} />
     </Routes>
