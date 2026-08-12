@@ -52,7 +52,7 @@ function AppRoutes() {
     }
   };
 
-  if (!user) {
+  if (!user && !BYPASS_AUTH) {
     return (
       <Routes>
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
