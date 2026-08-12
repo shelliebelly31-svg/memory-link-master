@@ -53,8 +53,8 @@ function AppRoutes() {
         <Route path="/" element={<AuthPage onAuth={handleAuth} />} />
         <Route path="/quiz/:token" element={<SharedQuizPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
-        <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+        <Route path="/.lovable/oauth/consent" element={<OAuthConsent />} />
+
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     );
