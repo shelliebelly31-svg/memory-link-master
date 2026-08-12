@@ -92,7 +92,7 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
           </div>
 
           {/* Auth Form */}
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={isForgot ? handleReset : handleSubmit} className="space-y-5">
             <div className="space-y-4">
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
@@ -105,25 +105,33 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
                   disabled={isLoading}
                 />
               </div>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="Password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="pl-10 pr-10"
-                  disabled={isLoading}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                >
-                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-                </button>
-              </div>
+              {!isForgot && (
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="Password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="pl-10 pr-10"
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                  >
+                    {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  </button>
+                </div>
+              )}
             </div>
+
+            {isForgot && resetSent && (
+              <p className="text-sm text-muted-foreground text-center">
+                If an account exists for that email, a reset link is on its way.
+              </p>
+            )}
 
             <Button
               type="submit"
@@ -136,7 +144,7 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
                 <Loader2 className="h-5 w-5 animate-spin" />
               ) : (
                 <>
-                  {isSignUp ? 'Create Account' : 'Sign In'}
+                  {isForgot ? 'Send reset link' : isSignUp ? 'Create Account' : 'Sign In'}
                   <ArrowRight className="h-5 w-5" />
                 </>
               )}
@@ -144,18 +152,42 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
           </form>
 
           {/* Toggle Auth Mode */}
-          <div className="text-center">
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-sm text-muted-foreground hover:text-primary transition-colors"
-            >
-              {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-              <span className="font-semibold text-primary">
-                {isSignUp ? 'Sign in' : 'Sign up'}
-              </span>
-            </button>
+          <div className="text-center space-y-2">
+            {isForgot ? (
+              <button
+                type="button"
+                onClick={() => { setIsForgot(false); setResetSent(false); }}
+                className="text-sm text-muted-foreground hover:text-primary transition-colors"
+              >
+                Back to <span className="font-semibold text-primary">Sign in</span>
+              </button>
+            ) : (
+              <>
+                {!isSignUp && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => { setIsForgot(true); setResetSent(false); }}
+                      className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                    >
+                      Forgot your password?
+                    </button>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setIsSignUp(!isSignUp)}
+                  className="text-sm text-muted-foreground hover:text-primary transition-colors"
+                >
+                  {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
+                  <span className="font-semibold text-primary">
+                    {isSignUp ? 'Sign in' : 'Sign up'}
+                  </span>
+                </button>
+              </>
+            )}
           </div>
+
 
           {/* Features Preview */}
           <div className="space-y-3 pt-6 border-t border-border">
